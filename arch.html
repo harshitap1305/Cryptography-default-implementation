@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DEFAULT Cipher: Sandwich Architecture 3D Visualization</title>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <!-- GSAP for UI and Camera Animations -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <!-- Three.js for God-Level 3D -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+
+    <style>
+        :root {
+            --primary: #00f2fe;
+            --secondary: #4facfe;
+            --core: #ff3366;
+            --bg: #030308;
+            --text: #ffffff;
+            --text-dim: #a0a0b0;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--bg);
+            font-family: 'Inter', sans-serif;
+            color: var(--text);
+        }
+
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* Overlay UI Elements */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 40px;
+            box-sizing: border-box;
+        }
+
+        header {
+            pointer-events: auto;
+            max-width: 800px;
+        }
+
+        .title-badge {
+            display: inline-block;
+            background: rgba(0, 242, 254, 0.1);
+            border: 1px solid rgba(0, 242, 254, 0.3);
+            color: var(--primary);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 12px;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 48px;
+            font-weight: 800;
+            letter-spacing: -1px;
+            background: linear-gradient(135deg, #fff 0%, #a0a0b0 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            line-height: 1.1;
+        }
+
+        .subtitle {
+            margin-top: 15px;
+            font-size: 18px;
+            color: var(--text-dim);
+            font-weight: 300;
+            max-width: 600px;
+            line-height: 1.6;
+        }
+
+        /* Live State Data UI */
+        #data-visor {
+            pointer-events: auto;
+            position: absolute;
+            top: 40px;
+            right: 40px;
+            background: rgba(10, 10, 20, 0.8);
+            border: 1px solid var(--primary);
+            border-radius: 12px;
+            padding: 20px;
+            width: 380px;
+            font-family: 'JetBrains Mono', monospace;
+            box-shadow: 0 0 20px rgba(0, 242, 254, 0.2);
+            transition: border-color 0.4s, box-shadow 0.4s;
+            backdrop-filter: blur(10px);
+        }
+
+        #data-visor h3 {
+            margin: 0 0 15px 0;
+            font-size: 14px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .visor-row {
+            margin-bottom: 12px;
+        }
+
+        .visor-label {
+            font-size: 11px;
+            color: var(--primary);
+            margin-bottom: 4px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .visor-value {
+            font-size: 14px;
+            color: #fff;
+            background: rgba(0,0,0,0.5);
+            padding: 8px;
+            border-radius: 6px;
+            word-break: break-all;
+            letter-spacing: 1px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        #plaintext-input {
+            width: 100%;
+            background: transparent;
+            border: none;
+            color: #fff;
+            font-family: inherit;
+            font-size: 14px;
+            outline: none;
+        }
+
+        .live-status {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            background: rgba(0, 242, 254, 0.2);
+            color: var(--primary);
+            font-size: 10px;
+            font-weight: bold;
+        }
+
+        /* Crypto Terminal Logging */
+        #crypto-terminal {
+            pointer-events: auto;
+            position: absolute;
+            top: 265px;
+            right: 40px;
+            background: rgba(5, 5, 10, 0.9);
+            border: 1px solid rgba(0, 242, 254, 0.3);
+            border-radius: 8px;
+            width: 380px;
+            height: 380px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            backdrop-filter: blur(10px);
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+
+        .term-header {
+            background: rgba(0, 242, 254, 0.1);
+            color: var(--primary);
+            padding: 8px 12px;
+            border-bottom: 1px solid rgba(0, 242, 254, 0.2);
+            font-weight: bold;
+            font-size: 10px;
+            letter-spacing: 1px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        #term-content {
+            flex: 1;
+            padding: 10px;
+            overflow-y: auto;
+            color: #e0e0e0;
+            line-height: 1.6;
+        }
+
+        .log-round { color: #ff3366; margin-top: 8px; font-weight: bold; }
+        .log-round.ls { color: #00f2fe; }
+        .log-phase { color: #fff; margin-top: 4px; font-weight: bold; font-size: 10px; }
+        .log-data { color: rgba(255, 255, 255, 0.6); padding-left: 10px; word-break: break-all; }
+        .log-highlight { color: #00ff66; padding-left: 10px; word-break: break-all; }
+
+        /* Scrollbar styles for terminal */
+        #term-content::-webkit-scrollbar { width: 6px; }
+        #term-content::-webkit-scrollbar-track { background: rgba(0,0,0,0.3); }
+        #term-content::-webkit-scrollbar-thumb { background: rgba(0, 242, 254, 0.4); border-radius: 3px; }
+
+        /* Panel Box (Bottom Left) */
+        .info-panel {
+            pointer-events: auto;
+            background: rgba(10, 10, 20, 0.6);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            border-left: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 40px;
+            border-radius: 20px;
+            max-width: 500px;
+            box-shadow: 0 30px 60px rgba(0,0,0,0.5);
+            transform: translateY(0);
+        }
+
+        .step-dots {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 25px;
+        }
+
+        .dot {
+            width: 30px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+            transition: all 0.4s ease;
+        }
+
+        .dot.active {
+            background: var(--primary);
+            box-shadow: 0 0 10px var(--primary);
+        }
+
+        .dot.active.core {
+            background: var(--core);
+            box-shadow: 0 0 10px var(--core);
+        }
+
+        h2#step-title {
+            margin: 0 0 15px 0;
+            font-size: 28px;
+            font-weight: 600;
+            color: var(--primary);
+            transition: color 0.4s;
+        }
+
+        p#step-desc {
+            font-size: 16px;
+            line-height: 1.7;
+            color: #d0d0e0;
+            margin-bottom: 30px;
+            min-height: 80px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+        }
+
+        button {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+            padding: 14px 28px;
+            border-radius: 10px;
+            font-family: 'Inter', sans-serif;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        button:not(:disabled):hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+        button.primary {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            border: none;
+            color: #000;
+            box-shadow: 0 10px 20px rgba(0, 242, 254, 0.2);
+        }
+
+        button.primary:not(:disabled):hover {
+            background: linear-gradient(135deg, #2dfaff 0%, #6ab2ff 100%);
+            box-shadow: 0 15px 30px rgba(0, 242, 254, 0.4);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: none !important;
+        }
+
+        /* Loading Screen */
+        #loader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--bg);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: opacity 1s ease;
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 3px solid rgba(0, 242, 254, 0.1);
+            border-top: 3px solid var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        .loader-text {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--primary);
+            letter-spacing: 3px;
+            font-size: 14px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Stats overlays */
+        #stats-panel {
+            text-align: right;
+            font-family: 'JetBrains Mono', monospace;
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Loading Screen -->
+    <div id="loader">
+        <div class="spinner"></div>
+        <div class="loader-text">INITIALIZING QUANTUM STATE...</div>
+    </div>
+
+    <!-- WebGL Canvas -->
+    <div id="canvas-container"></div>
+
+    <!-- UI Overlay -->
+    <div id="ui-layer">
+        <header>
+            <div class="title-badge">Algorithmic DFA Resilience</div>
+            <h1>DEFAULT Cipher Architecture</h1>
+            <div class="subtitle">An interactive 3D visualization of the "Sandwich Architecture". Watch live execution of LS and non-LS S-boxes on your custom plaintext.</div>
+        </header>
+
+        <!-- Live Cipher Data Panel -->
+        <div id="data-visor">
+            <h3>
+                Ciphertext State <span id="visor-status" class="live-status">WAITING</span>
+            </h3>
+            
+            <div class="visor-row">
+                <div class="visor-label">
+                    Plaintext Input (128-bit Hex)
+                    <label style="color: var(--text-dim); cursor: pointer; display: flex; align-items: center; gap: 4px; font-family: 'Inter'; font-weight: normal; font-size: 11px;">
+                        <input type="checkbox" id="chk-slow-mode" checked> Inspect Step-by-Step
+                    </label>
+                </div>
+                <div class="visor-value" style="border-color: #555;">
+                    <input type="text" id="plaintext-input" value="00112233445566778899aabbccddeeff" maxlength="32">
+                </div>
+            </div>
+            
+            <div class="visor-row" id="current-state-container" style="opacity: 0.5; pointer-events: none;">
+                <div class="visor-label" id="state-label">Current State (Round 0)</div>
+                <div class="visor-value" id="current-state">00112233445566778899aabbccddeeff</div>
+            </div>
+        </div>
+
+        <!-- Crypto Mathematical Operations Terminal -->
+        <div id="crypto-terminal">
+            <div class="term-header">
+                <span>Operation Logistics</span>
+                <span id="term-round-indicator">Idle</span>
+            </div>
+            <div id="term-content">
+                <div style="color: rgba(255,255,255,0.4)">> Waiting for mathematical execution...</div>
+            </div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: flex-end; width: 100%;">
+            <div class="info-panel">
+                <div class="step-dots" id="dots-container">
+                    <div class="dot active"></div>
+                    <div class="dot"></div>
+                    <div class="dot"></div>
+                    <div class="dot"></div>
+                    <div class="dot"></div>
+                </div>
+
+                <h2 id="step-title">01. Plaintext Input</h2>
+                <p id="step-desc">The process begins with a 128-bit plaintext block state. The cipher is a Substitution-Permutation Network (SPN). It provides resilience by structurally bounding the attacker's search space.</p>
+
+                <div class="controls">
+                    <button id="btn-prev" disabled>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                        Previous
+                    </button>
+                    <button id="btn-next" class="primary">
+                        Execute Layer
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Contextual Stats UI -->
+            <div id="stats-panel">
+                <div style="color: var(--primary); font-size: 14px; margin-bottom: 5px;">Rounds</div>
+                <div id="stat-rounds" style="font-size: 32px; font-weight: bold; margin-bottom: 15px;">0</div>
+                <div style="color: var(--primary); font-size: 14px; margin-bottom: 5px;">DFA Complexity</div>
+                <div id="stat-dfa" style="font-size: 32px; font-weight: bold; margin-bottom: 15px;">-</div>
+                <div style="color: var(--primary); font-size: 14px; margin-bottom: 5px;">S-Box Type</div>
+                <div id="stat-sbox" style="font-size: 20px; font-weight: bold;">Standard</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Application -->
+    <script>
+        // --- REAL DEFAULT CIPHER IMPLEMENTATION ---
+
+        const S_LS = [0x0, 0x3, 0x7, 0xE, 0xD, 0x4, 0xA, 0x9, 0xC, 0xF, 0x1, 0x8, 0xB, 0x2, 0x6, 0x5];
+        const S_NLS = [0x1, 0x9, 0x6, 0xF, 0x7, 0xC, 0x8, 0x2, 0xA, 0xE, 0xD, 0x0, 0x4, 0x3, 0xB, 0x5];
+
+        const P128 = [
+            0, 16, 32, 48, 64, 80, 96, 112,
+            4, 20, 36, 52, 68, 84, 100, 116,
+            8, 24, 40, 56, 72, 88, 104, 120,
+            12, 28, 44, 60, 76, 92, 108, 124,
+            1, 17, 33, 49, 65, 81, 97, 113,
+            5, 21, 37, 53, 69, 85, 101, 117,
+            9, 25, 41, 57, 73, 89, 105, 121,
+            13, 29, 45, 61, 77, 93, 109, 125,
+            2, 18, 34, 50, 66, 82, 98, 114,
+            6, 22, 38, 54, 70, 86, 102, 118,
+            10, 26, 42, 58, 74, 90, 106, 122,
+            14, 30, 46, 62, 78, 94, 110, 126,
+            3, 19, 35, 51, 67, 83, 99, 115,
+            7, 23, 39, 55, 71, 87, 103, 119,
+            11, 27, 43, 59, 75, 91, 107, 123,
+            15, 31, 47, 63, 79, 95, 111, 127
+        ];
+
+        class DefaultCipherEngine {
+            constructor() {
+                this.state = new Uint8Array(32); // 32 nibbles
+                this.lfsr = 0; // 6-bit LFSR for round constants
+            }
+
+            loadPlaintext(hexStr) {
+                hexStr = hexStr.padEnd(32, '0').slice(0, 32);
+                for (let i = 0; i < 32; i++) {
+                    this.state[31 - i] = parseInt(hexStr[i], 16) || 0;
+                }
+                this.lfsr = 0;
+            }
+
+            getStateHex() {
+                let s = "";
+                for (let i = 31; i >= 0; i--) {
+                    s += this.state[i].toString(16);
+                }
+                return s;
+            }
+
+            // Execute phased parts of a round to allow visualizing intermediate steps
+            
+            applySubCells(roundNum) {
+                let S = (roundNum < 28 || roundNum >= 52) ? S_LS : S_NLS;
+                for (let i = 0; i < 32; i++) {
+                    this.state[i] = S[this.state[i]];
+                }
+            }
+
+            applyPermBits() {
+                let bits = new Array(128);
+                for (let j = 0; j < 128; j++) {
+                    bits[j] = (this.state[Math.floor(j / 4)] >> (j % 4)) & 1;
+                }
+                let newBits = new Array(128);
+                for (let j = 0; j < 128; j++) {
+                    newBits[P128[j]] = bits[j];
+                }
+                for (let i = 0; i < 32; i++) {
+                    this.state[i] = (newBits[i * 4]) | (newBits[i * 4 + 1] << 1) | (newBits[i * 4 + 2] << 2) | (newBits[i * 4 + 3] << 3);
+                }
+            }
+
+            applyAddRoundConstants() {
+                let c0 = this.lfsr & 1;
+                let c1 = (this.lfsr >> 1) & 1;
+                let c2 = (this.lfsr >> 2) & 1;
+                let c3 = (this.lfsr >> 3) & 1;
+                let c4 = (this.lfsr >> 4) & 1;
+                let c5 = (this.lfsr >> 5) & 1;
+                
+                this.state[0] ^= (c0 << 3);
+                this.state[1] ^= (c1 << 3);
+                this.state[2] ^= (c2 << 3);
+                this.state[3] ^= (c3 << 3);
+                this.state[4] ^= (c4 << 3);
+                this.state[5] ^= (c5 << 3);
+                this.state[31] ^= 8; 
+
+                // Advance LFSR
+                let newBit = c5 ^ c4 ^ 1;
+                this.lfsr = ((this.lfsr << 1) | newBit) & 0x3F;
+            }
+
+            applyAddRoundKey() {
+                // Fixed visualization key assumption: all-zero
+            }
+        }
+
+        const cipher = new DefaultCipherEngine();
+        let currentRoundTarget = 0;
+        let animatedRound = 0;
+        let isAnimatingCrypto = false;
+        let cryptoPhase = 0; // 0=SubCells, 1=PermBits, 2=AddRC, 3=AddKey
+
+        // Data content mapped to steps
+        const stepData = [
+            {
+                title: "01. Plaintext Input",
+                desc: "The encryption process begins with a 128-bit plaintext block. Enter your custom text in the visor on the right. You can enable 'Inspect Step-by-Step' to visually break down what happens mathematically per round.",
+                theme: "#ffffff",
+                targetZ: 0,
+                camPos: { x: 12, y: 8, z: 15 },
+                camLook: { x: 0, y: 0, z: 0 },
+                stats: { rounds: "0", dfa: "N/A", sbox: "Initial State" },
+                btnText: "Start Encryption",
+                endRound: 0
+            },
+            {
+                title: "02. Initial DEFAULT-LAYER",
+                desc: "The state enters the first layer (28 rounds). This layer employs S-boxes with Linear Structures (LS S-boxes). It guarantees algorithmic DFA resilience. Watch the Operations Terminal to see exactly what gets XORed.",
+                theme: "#00f2fe",
+                targetZ: -100,
+                camPos: { x: -25, y: 15, z: -80 },
+                camLook: { x: 0, y: 0, z: -100 },
+                stats: { rounds: "28", dfa: "≥ 2^64", sbox: "LS S-Box" },
+                btnText: "Enter Core Layer",
+                endRound: 28
+            },
+            {
+                title: "03. DEFAULT-CORE",
+                desc: "The heart of the cipher (24 rounds), utilizing highly nonlinear, non-LS S-boxes. This layer provides classical cryptographic security against differential and linear cryptanalysis.",
+                theme: "#ff3366",
+                targetZ: -200,
+                camPos: { x: 30, y: -5, z: -180 },
+                camLook: { x: 0, y: 0, z: -200 },
+                stats: { rounds: "24", dfa: "Core", sbox: "Non-LS S-Box" },
+                btnText: "Enter Final Layer",
+                endRound: 52
+            },
+            {
+                title: "04. Final DEFAULT-LAYER",
+                desc: "The state passes through the final enclosing layer (28 rounds). Mirroring the initial layer, it applies LS S-boxes to protect the ciphertext output.",
+                theme: "#00f2fe",
+                targetZ: -300,
+                camPos: { x: -15, y: 20, z: -280 },
+                camLook: { x: 0, y: 0, z: -300 },
+                stats: { rounds: "28", dfa: "≥ 2^64", sbox: "LS S-Box" },
+                btnText: "Show Ciphertext",
+                endRound: 80
+            },
+            {
+                title: "05. Ciphertext Output",
+                desc: "The fully encrypted 128-bit ciphertext is produced. Thanks to the rigorous 'Sandwich Architecture', the cipher retains both classical security and algorithmic DFA resilience.",
+                theme: "#00ff66",
+                targetZ: -400,
+                camPos: { x: 0, y: 10, z: -360 },
+                camLook: { x: 0, y: 0, z: -400 },
+                stats: { rounds: "Total 80", dfa: "Protected", sbox: "Final State" },
+                btnText: "Finish",
+                endRound: 80
+            }
+        ];
+
+        let currentStep = 0;
+
+        // UI DOM Elements
+        const titleEl = document.getElementById('step-title');
+        const descEl = document.getElementById('step-desc');
+        const btnNext = document.getElementById('btn-next');
+        const btnPrev = document.getElementById('btn-prev');
+        const dots = document.querySelectorAll('.dot');
+        const statsPanel = document.getElementById('stats-panel');
+        const statRounds = document.getElementById('stat-rounds');
+        const statDfa = document.getElementById('stat-dfa');
+        const statSbox = document.getElementById('stat-sbox');
+        
+        // Live UI Elements
+        const ptInput = document.getElementById('plaintext-input');
+        const chkSlowMode = document.getElementById('chk-slow-mode');
+        const stateContainer = document.getElementById('current-state-container');
+        const currentStateVal = document.getElementById('current-state');
+        const stateLabel = document.getElementById('state-label');
+        const visorData = document.getElementById('data-visor');
+        const visorStatus = document.getElementById('visor-status');
+        
+        // Terminal Elements
+        const cryptoTerminal = document.getElementById('crypto-terminal');
+        const termContent = document.getElementById('term-content');
+        const termRoundIndicator = document.getElementById('term-round-indicator');
+
+        // Three.js Setup
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x030308, 0.005);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 1000);
+        camera.position.set(12, 8, 15);
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.toneMapping = THREE.ReinhardToneMapping;
+        container.appendChild(renderer.domElement);
+
+        const renderScene = new THREE.RenderPass(scene, camera);
+        const bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+        bloomPass.threshold = 0;
+        bloomPass.strength = 1.2;
+        bloomPass.radius = 0.5;
+
+        const composer = new THREE.EffectComposer(renderer);
+        composer.addPass(renderScene);
+        composer.addPass(bloomPass);
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            composer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // --------------------------------------------------------
+        // SCENE CONSTRUCTION
+        // --------------------------------------------------------
+
+        const blockGroup = new THREE.Group();
+        const blockMaterials = [];
+        const cubes = [];
+        
+        for (let i = 0; i < 16; i++) {
+            const geo = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+            const edges = new THREE.EdgesGeometry(geo);
+            
+            const mat = new THREE.MeshPhysicalMaterial({ 
+                color: 0xffffff,
+                metalness: 0.2,
+                roughness: 0.1,
+                transparent: true,
+                opacity: 0.9,
+                emissive: 0x222222,
+                emissiveIntensity: 0.5
+            });
+            
+            const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 });
+            
+            const cube = new THREE.Mesh(geo, mat);
+            const line = new THREE.LineSegments(edges, lineMat);
+            cube.add(line);
+            
+            const x = (i % 4) - 1.5;
+            const y = Math.floor(i / 4) - 1.5;
+            cube.position.set(x * 1.1, y * 1.1, 0);
+            
+            blockGroup.add(cube);
+            cubes.push(cube);
+            blockMaterials.push(mat);
+        }
+        scene.add(blockGroup);
+
+        function createLayerTunnel(zStart, length, colorHex, isCore) {
+            const group = new THREE.Group();
+            const color = new THREE.Color(colorHex);
+            const rounds = isCore ? 24 : 28;
+            const spacing = length / rounds;
+
+            for (let i = 0; i < rounds; i++) {
+                const z = zStart - (i * spacing);
+                
+                if (isCore) {
+                    const geo = new THREE.TorusGeometry(8, 0.4, 8, 20);
+                    const mat = new THREE.MeshStandardMaterial({ color: color, emissive: color, emissiveIntensity: 0.8 });
+                    const ring = new THREE.Mesh(geo, mat);
+                    ring.position.z = z;
+                    ring.rotation.x = Math.PI / 2;
+                    group.add(ring);
+
+                    for(let j=0; j<4; j++) {
+                        const innerGeo = new THREE.OctahedronGeometry(Math.random() * 2 + 1);
+                        const innerMat = new THREE.MeshBasicMaterial({ color: color, wireframe: true, transparent: true, opacity: 0.5 });
+                        const inner = new THREE.Mesh(innerGeo, innerMat);
+                        inner.position.set((Math.random()-0.5)*10, (Math.random()-0.5)*10, z);
+                        inner.userData = { rotSpeed: Math.random() * 0.05, isInner: true };
+                        group.add(inner);
+                    }
+                } else {
+                    const size = 12;
+                    const geo = new THREE.BoxGeometry(size, size, size);
+                    const edges = new THREE.EdgesGeometry(geo);
+                    const lineMat = new THREE.LineBasicMaterial({ color: color, transparent: true, opacity: 0.4 });
+                    const grid = new THREE.LineSegments(edges, lineMat);
+                    grid.position.z = z;
+                    grid.rotation.z = i * 0.1;
+                    group.add(grid);
+
+                    const nodeGeo = new THREE.SphereGeometry(0.3, 8, 8);
+                    const nodeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+                    const p = size/2;
+                    const corners = [[p,p,p], [-p,p,p], [p,-p,p], [-p,-p,p], [p,p,-p], [-p,p,-p], [p,-p,-p], [-p,-p,-p]];
+                    corners.forEach(pos => {
+                        const node = new THREE.Mesh(nodeGeo, nodeMat);
+                        node.position.set(pos[0], pos[1], pos[2]);
+                        grid.add(node);
+                    });
+                }
+            }
+
+            const lineGeo = new THREE.BufferGeometry();
+            const points = [];
+            for(let i=0; i<8; i++) {
+                const a = i * Math.PI / 4;
+                const r = isCore ? 8 : 6;
+                const x = Math.cos(a) * r;
+                const y = Math.sin(a) * r;
+                points.push(new THREE.Vector3(x, y, zStart));
+                points.push(new THREE.Vector3(x, y, zStart - length));
+            }
+            lineGeo.setFromPoints(points);
+            const pMat = new THREE.LineBasicMaterial({ color: color, transparent: true, opacity: 0.2 });
+            const pLine = new THREE.LineSegments(lineGeo, pMat);
+            group.add(pLine);
+
+            return group;
+        }
+
+        const tLen = 60;
+        const layer1Group = createLayerTunnel(-70, tLen, 0x00f2fe, false);
+        const coreGroup = createLayerTunnel(-170, tLen, 0xff3366, true);
+        const layer2Group = createLayerTunnel(-270, tLen, 0x00f2fe, false);
+        
+        scene.add(layer1Group);
+        scene.add(coreGroup);
+        scene.add(layer2Group);
+
+        const posArray = new Float32Array(2000 * 3);
+        const colorArray = new Float32Array(2000 * 3);
+        for(let i=0; i<2000 * 3; i+=3) {
+            posArray[i] = (Math.random() - 0.5) * 100;
+            posArray[i+1] = (Math.random() - 0.5) * 100;
+            posArray[i+2] = (Math.random() * -500) + 50;
+            colorArray[i] = 1.0; colorArray[i+1] = 1.0; colorArray[i+2] = 1.0;
+        }
+        const particleGeo = new THREE.BufferGeometry();
+        particleGeo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        particleGeo.setAttribute('color', new THREE.BufferAttribute(colorArray, 3));
+        const particleMat = new THREE.PointsMaterial({ size: 0.2, vertexColors: true, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending });
+        const particles = new THREE.Points(particleGeo, particleMat);
+        scene.add(particles);
+
+        const pointLight = new THREE.PointLight(0xffffff, 2, 50);
+        blockGroup.add(pointLight);
+
+        const cameraTarget = new THREE.Vector3(0,0,0);
+
+        // --------------------------------------------------------
+        // STATE MACHINE
+        // --------------------------------------------------------
+
+        function updateUI(stepIndex) {
+            const data = stepData[stepIndex];
+            
+            titleEl.style.color = data.theme;
+            visorData.style.borderColor = data.theme;
+            currentStateVal.style.color = data.theme;
+            btnNext.innerHTML = `${data.btnText} <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>`;
+
+            gsap.to([titleEl, descEl], {
+                opacity: 0, y: 10, duration: 0.3, onComplete: () => {
+                    titleEl.innerText = data.title;
+                    descEl.innerText = data.desc;
+                    gsap.to([titleEl, descEl], { opacity: 1, y: 0, duration: 0.4, stagger: 0.1 });
+                }
+            });
+
+            dots.forEach((dot, idx) => {
+                dot.className = "dot";
+                if (idx === stepIndex) {
+                    dot.classList.add("active");
+                    if (data.theme === "#ff3366") dot.classList.add("core");
+                } else if (idx < stepIndex) {
+                    dot.style.background = "rgba(255,255,255,0.4)";
+                } else {
+                    dot.style.background = "rgba(255,255,255,0.2)";
+                }
+            });
+
+            btnPrev.disabled = stepIndex === 0;
+            btnNext.disabled = stepIndex === stepData.length - 1;
+            
+            if (stepIndex > 0) {
+                gsap.to(statsPanel, { opacity: 1, duration: 0.5 });
+                ptInput.disabled = true;
+                chkSlowMode.disabled = true;
+                stateContainer.style.opacity = "1";
+                visorStatus.innerText = "ACTIVE";
+                visorStatus.style.color = "#00ff66";
+                visorStatus.style.background = "rgba(0, 255, 102, 0.2)";
+                cryptoTerminal.style.opacity = "1";
+                
+                const proxy = { r: parseInt(statRounds.innerText) || 0 };
+                const targetR = parseInt(data.stats.rounds) || 0;
+                gsap.to(proxy, {
+                    r: targetR,
+                    duration: 1,
+                    roundProps: "r",
+                    onUpdate: () => { statRounds.innerText = proxy.r + (stepIndex===4 ? " Total" : ""); }
+                });
+                statDfa.innerText = data.stats.dfa;
+                statSbox.innerText = data.stats.sbox;
+                statRounds.style.color = data.theme;
+                statDfa.style.color = data.theme;
+                statSbox.style.color = data.theme;
+            } else {
+                gsap.to(statsPanel, { opacity: 0, duration: 0.5 });
+                ptInput.disabled = false;
+                chkSlowMode.disabled = false;
+                stateContainer.style.opacity = "0.5";
+                visorStatus.innerText = "WAITING";
+                visorStatus.style.color = "var(--primary)";
+                visorStatus.style.background = "rgba(0, 242, 254, 0.2)";
+                cryptoTerminal.style.opacity = "0";
+                
+                cipher.loadPlaintext(ptInput.value);
+                currentStateVal.innerText = cipher.getStateHex();
+                animatedRound = 0;
+                termContent.innerHTML = '<div style="color: rgba(255,255,255,0.4)">> Waiting for mathematical execution...</div>';
+            }
+            
+            if(stepIndex > 0) {
+                if(animatedRound === 0) {
+                    cipher.loadPlaintext(ptInput.value);
+                }
+                currentRoundTarget = data.endRound;
+                isAnimatingCrypto = true;
+            }
+        }
+
+        function triggerVisorPulse() {
+            gsap.fromTo(visorData, 
+                { boxShadow: "0 0 40px " + stepData[currentStep].theme },
+                { boxShadow: "0 0 20px rgba(0, 242, 254, 0.2)", duration: 0.5 }
+            );
+        }
+
+        function pushTerminalLog(htmlSnippet) {
+            const div = document.createElement('div');
+            div.innerHTML = htmlSnippet;
+            termContent.appendChild(div);
+            // Auto scroll
+            termContent.scrollTop = termContent.scrollHeight;
+        }
+
+        function goToStep(stepIndex) {
+            if (stepIndex < 0 || stepIndex >= stepData.length) return;
+            currentStep = stepIndex;
+            const data = stepData[stepIndex];
+
+            gsap.to(blockGroup.position, { z: data.targetZ, duration: 2.5, ease: "power2.inOut" });
+
+            cubes.forEach((cube, i) => {
+                let rotX = Math.PI * 4;
+                let rotY = Math.PI * 4;
+                let randX = (Math.random() - 0.5) * (stepIndex > 0 ? 1.5 : 0);
+                let randY = (Math.random() - 0.5) * (stepIndex > 0 ? 1.5 : 0);
+                
+                if(stepIndex === 0) { rotX = 0; rotY = 0; randX = 0; randY = 0; }
+                const baseX = (i % 4) - 1.5; const baseY = Math.floor(i / 4) - 1.5;
+
+                gsap.to(cube.position, { x: (baseX * 1.1) + randX, y: (baseY * 1.1) + randY, duration: 2, ease: "power2.out", delay: i * 0.02 });
+                gsap.to(cube.rotation, { x: `+=${rotX}`, y: `+=${rotY}`, duration: 2.5, ease: "power2.inOut", delay: i * 0.02 });
+            });
+
+            const targetColor = new THREE.Color(data.theme);
+            const isCiphertext = stepIndex === 4;
+            
+            blockMaterials.forEach((mat) => {
+                gsap.to(mat.emissive, { r: targetColor.r, g: targetColor.g, b: targetColor.b, duration: 1.5 });
+                gsap.to(mat.color, { r: isCiphertext ? 0.2 : 1, g: isCiphertext ? 0.8 : 1, b: isCiphertext ? 0.2 : 1, duration: 1.5 });
+            });
+            gsap.to(pointLight.color, { r: targetColor.r, g: targetColor.g, b: targetColor.b, duration: 1.5 });
+
+            gsap.to(camera.position, { x: data.camPos.x, y: data.camPos.y, z: data.camPos.z, duration: 3, ease: "power3.inOut" });
+            gsap.to(cameraTarget, { x: data.camLook.x, y: data.camLook.y, z: data.camLook.z, duration: 3, ease: "power3.inOut" });
+
+            updateUI(stepIndex);
+        }
+
+        btnNext.addEventListener('click', () => goToStep(currentStep + 1));
+        btnPrev.addEventListener('click', () => goToStep(currentStep - 1));
+
+        ptInput.addEventListener('input', () => {
+            let val = ptInput.value.replace(/[^0-9a-fA-F]/g, '');
+            ptInput.value = val;
+            cipher.loadPlaintext(val);
+            currentStateVal.innerText = cipher.getStateHex();
+        });
+
+        const clock = new THREE.Clock();
+        let lastCryptoTime = 0;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = clock.getElapsedTime();
+
+            camera.lookAt(cameraTarget);
+            blockGroup.position.y += Math.sin(time * 2) * 0.005;
+            layer1Group.rotation.z = time * 0.05;
+            layer2Group.rotation.z = time * 0.05;
+            
+            const coreScale = 1 + Math.sin(time * 5) * 0.02;
+            coreGroup.scale.set(coreScale, coreScale, 1);
+            coreGroup.children.forEach(child => {
+                if(child.userData.isInner) {
+                    child.rotation.x += child.userData.rotSpeed;
+                    child.rotation.y += child.userData.rotSpeed;
+                }
+            });
+
+            const positions = particles.geometry.attributes.position.array;
+            for(let i=2; i<positions.length; i+=3) {
+                positions[i] += 0.5;
+                if(positions[i] > 50) positions[i] = -500;
+            }
+            particles.geometry.attributes.position.needsUpdate = true;
+
+            // Live Crypto Execution
+            if (isAnimatingCrypto && currentStep > 0 && animatedRound < currentRoundTarget) {
+                
+                // Slow mode checks
+                const isSlowMode = chkSlowMode.checked;
+                const delay = isSlowMode ? 0.3 : 0.02;
+
+                if (time - lastCryptoTime > delay) {
+                    
+                    if (isSlowMode) {
+                        // Breakdown the mathematical phases
+                        if (cryptoPhase === 0) {
+                            const layerCls = (animatedRound < 28 || animatedRound >= 52) ? 'ls' : '';
+                            const layerTxt = (animatedRound < 28 || animatedRound >= 52) ? 'LAYER (LS)' : 'CORE (NLS)';
+                            
+                            termRoundIndicator.innerText = `R${animatedRound} | Phase 1/4`;
+                            pushTerminalLog(`<br><div class="log-round ${layerCls}">> ROUND ${animatedRound} | ${layerTxt}</div>`);
+                            
+                            cipher.applySubCells(animatedRound);
+                            pushTerminalLog(`<div class="log-phase">1. SubCells (S-Box Array Applied)</div><div class="log-data">${cipher.getStateHex()}</div>`);
+                            
+                            cryptoPhase = 1;
+
+                        } else if (cryptoPhase === 1) {
+                            termRoundIndicator.innerText = `R${animatedRound} | Phase 2/4`;
+                            cipher.applyPermBits();
+                            pushTerminalLog(`<div class="log-phase">2. PermBits (GIFT-128 P128 Mapping)</div><div class="log-data">${cipher.getStateHex()}</div>`);
+                            cryptoPhase = 2;
+
+                        } else if (cryptoPhase === 2) {
+                            termRoundIndicator.innerText = `R${animatedRound} | Phase 3/4`;
+                            const currentLFSR = cipher.lfsr.toString(2).padStart(6, '0');
+                            cipher.applyAddRoundConstants();
+                            pushTerminalLog(`<div class="log-phase">3. AddRoundConst (LFSR: ${currentLFSR})</div><div class="log-data">${cipher.getStateHex()}</div>`);
+                            cryptoPhase = 3;
+
+                        } else if (cryptoPhase === 3) {
+                            termRoundIndicator.innerText = `R${animatedRound} | Done`;
+                            cipher.applyAddRoundKey(); // Null op in UI logic
+                            pushTerminalLog(`<div class="log-phase">4. AddRoundKey</div><div class="log-highlight">+ Result -> ${cipher.getStateHex()}</div>`);
+                            
+                            animatedRound++;
+                            cryptoPhase = 0; // ready for next round
+                        }
+                    } else {
+                        // Fast mode: Combine all phases into one tick without heavy logging
+                        cipher.applySubCells(animatedRound);
+                        cipher.applyPermBits();
+                        cipher.applyAddRoundConstants();
+                        cipher.applyAddRoundKey();
+                        
+                        pushTerminalLog(`<div style="color: rgba(255,255,255,0.3)">> R${animatedRound} EXECUTED FAST -> ${cipher.getStateHex()}</div>`);
+                        animatedRound++;
+                    }
+                    
+                    // After advancing a step or phase, update global UI Visor
+                    stateLabel.innerText = `Current State (Round ${animatedRound})`;
+                    currentStateVal.innerText = cipher.getStateHex();
+                    triggerVisorPulse();
+
+                    // Update Cube Material emission
+                    const stateHex = currentStateVal.innerText;
+                    for(let i=0; i<16; i++) {
+                        let byteVal = parseInt(stateHex.substring(i*2, i*2+2), 16) || 0;
+                        let intensity = (byteVal / 255) * 0.8 + 0.2;
+                        blockMaterials[15-i].emissiveIntensity = intensity;
+                    }
+
+                    if(animatedRound >= currentRoundTarget && cryptoPhase === 0) {
+                        isAnimatingCrypto = false;
+                        termRoundIndicator.innerText = "Execution Paused";
+                        pushTerminalLog(`<br><div class="log-round">> WAIT CONDITION SATISFIED</div>`);
+                        if(currentStep === 4) {
+                            visorStatus.innerText = "COMPLETED";
+                        }
+                    }
+                    lastCryptoTime = time;
+                }
+            }
+
+            composer.render();
+        }
+
+        window.onload = () => {
+            cipher.loadPlaintext(ptInput.value);
+            currentStateVal.innerText = cipher.getStateHex();
+            
+            const loader = document.getElementById('loader');
+            loader.style.opacity = '0';
+            setTimeout(() => {
+                loader.style.display = 'none';
+                goToStep(0);
+                animate();
+            }, 1000);
+        };
+    </script>
+</body>
+</html>
