@@ -81,7 +81,6 @@
             text-transform: uppercase;
             margin-bottom: 12px;
         }
-
         h1 {
             margin: 0;
             font-size: 48px;
@@ -92,6 +91,36 @@
             -webkit-text-fill-color: transparent;
             line-height: 1.1;
         }
+
+        .tabs-header {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            pointer-events: auto;
+        }
+
+        .tab-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #a0a0b0;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-family: 'Inter', sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .tab-btn.active {
+            background: rgba(0, 242, 254, 0.15);
+            border-color: var(--primary);
+            color: var(--primary);
+            box-shadow: 0 0 10px rgba(0, 242, 254, 0.2);
+        }
+
 
         .subtitle {
             margin-top: 15px;
@@ -392,9 +421,15 @@
     <div id="ui-layer">
         <header>
             <div class="title-badge">Algorithmic DFA Resilience</div>
-            <h1>DEFAULT Cipher Architecture</h1>
-            <div class="subtitle">An interactive 3D visualization of the "Sandwich Architecture". Watch live execution of LS and non-LS S-boxes on your custom plaintext.</div>
+            <h1 id="main-title">DEFAULT Cipher Architecture</h1>
+            <div class="tabs-header">
+                <button class="tab-btn active" id="tab-enc">Encryption</button>
+                <button class="tab-btn" id="tab-dec">Decryption</button>
+                <button class="tab-btn" id="tab-atk">Attack Analysis</button>
+            </div>
+            <div class="subtitle" id="main-subtitle">An interactive 3D visualization of the "Sandwich Architecture". Watch live execution of LS and non-LS S-boxes on your custom plaintext.</div>
         </header>
+
 
         <!-- Live Cipher Data Panel -->
         <div id="data-visor">
@@ -404,7 +439,7 @@
             
             <div class="visor-row">
                 <div class="visor-label">
-                    Plaintext Input (128-bit Hex)
+                    <span id="input-lbl">Plaintext Input (128-bit Hex)</span>
                     <label style="color: var(--text-dim); cursor: pointer; display: flex; align-items: center; gap: 4px; font-family: 'Inter'; font-weight: normal; font-size: 11px;">
                         <input type="checkbox" id="chk-slow-mode" checked> Inspect Step-by-Step
                     </label>
@@ -494,6 +529,28 @@
             15, 31, 47, 63, 79, 95, 111, 127
         ];
 
+        const INV_S_LS = new Array(16);
+        const INV_S_NLS = new Array(16);
+        for(let i=0; i<16; i++) {
+            INV_S_LS[S_LS[i]] = i;
+            INV_S_NLS[S_NLS[i]] = i;
+        }
+
+        const INV_P128 = new Array(128);
+        for(let i=0; i<128; i++) {
+            INV_P128[P128[i]] = i;
+        }
+
+        const lfsrSequence = new Array(80);
+        let tempLfsr = 0;
+        for(let r=0; r<80; r++) {
+            lfsrSequence[r] = tempLfsr;
+            let c4 = (tempLfsr >> 4) & 1;
+            let c5 = (tempLfsr >> 5) & 1;
+            let newBit = c5 ^ c4 ^ 1;
+            tempLfsr = ((tempLfsr << 1) | newBit) & 0x3F;
+        }
+
         class DefaultCipherEngine {
             constructor() {
                 this.state = new Uint8Array(32); // 32 nibbles
@@ -563,16 +620,57 @@
             applyAddRoundKey() {
                 // Fixed visualization key assumption: all-zero
             }
+
+            // --- DECRYPTION METHODS ---
+            applyInvSubCells(roundNum) {
+                let S = (roundNum < 28 || roundNum >= 52) ? INV_S_LS : INV_S_NLS;
+                for (let i = 0; i < 32; i++) {
+                    this.state[i] = S[this.state[i]];
+                }
+            }
+
+            applyInvPermBits() {
+                let bits = new Array(128);
+                for (let j = 0; j < 128; j++) {
+                    bits[j] = (this.state[Math.floor(j / 4)] >> (j % 4)) & 1;
+                }
+                let newBits = new Array(128);
+                for (let j = 0; j < 128; j++) {
+                    newBits[INV_P128[j]] = bits[j];
+                }
+                for (let i = 0; i < 32; i++) {
+                    this.state[i] = (newBits[i * 4]) | (newBits[i * 4 + 1] << 1) | (newBits[i * 4 + 2] << 2) | (newBits[i * 4 + 3] << 3);
+                }
+            }
+
+            applyInvAddRoundConstants(roundNum) {
+                let currentLfsr = lfsrSequence[roundNum];
+                let c0 = currentLfsr & 1;
+                let c1 = (currentLfsr >> 1) & 1;
+                let c2 = (currentLfsr >> 2) & 1;
+                let c3 = (currentLfsr >> 3) & 1;
+                let c4 = (currentLfsr >> 4) & 1;
+                let c5 = (currentLfsr >> 5) & 1;
+                
+                this.state[0] ^= (c0 << 3);
+                this.state[1] ^= (c1 << 3);
+                this.state[2] ^= (c2 << 3);
+                this.state[3] ^= (c3 << 3);
+                this.state[4] ^= (c4 << 3);
+                this.state[5] ^= (c5 << 3);
+                this.state[31] ^= 8; 
+            }
         }
 
         const cipher = new DefaultCipherEngine();
+        let currentMode = 'ENC';
         let currentRoundTarget = 0;
         let animatedRound = 0;
         let isAnimatingCrypto = false;
         let cryptoPhase = 0; // 0=SubCells, 1=PermBits, 2=AddRC, 3=AddKey
 
         // Data content mapped to steps
-        const stepData = [
+        const stepDataEnc = [
             {
                 title: "01. Plaintext Input",
                 desc: "The encryption process begins with a 128-bit plaintext block. Enter your custom text in the visor on the right. You can enable 'Inspect Step-by-Step' to visually break down what happens mathematically per round.",
@@ -630,6 +728,123 @@
             }
         ];
 
+        const stepDataDec = [
+            {
+                title: "01. Ciphertext Input",
+                desc: "The decryption process begins with the 128-bit ciphertext block. Enter your ciphertext in the visor. The cipher operates backwards (Round 79 to 0) applying Inverse operations.",
+                theme: "#00ff66",
+                targetZ: -400,
+                camPos: { x: 0, y: 10, z: -360 },
+                camLook: { x: 0, y: 0, z: -400 },
+                stats: { rounds: "80", dfa: "Protected", sbox: "Initial State" },
+                btnText: "Start Decryption",
+                endRound: 80
+            },
+            {
+                title: "02. Final DEFAULT-LAYER⁻¹",
+                desc: "Reversing the final layer (Rounds 79 to 52). It applies Inverse LS S-boxes and Inverse linear permutations. Watch the Operations Terminal for the exact reverse transformation.",
+                theme: "#00f2fe",
+                targetZ: -300,
+                camPos: { x: -15, y: 20, z: -280 },
+                camLook: { x: 0, y: 0, z: -300 },
+                stats: { rounds: "52", dfa: "≥ 2^64", sbox: "Inv-LS S-Box" },
+                btnText: "Enter Core Layer",
+                endRound: 52
+            },
+            {
+                title: "03. DEFAULT-CORE⁻¹",
+                desc: "Reversing the heart of the cipher (Rounds 51 to 28), utilizing highly nonlinear, non-LS Inverse S-boxes.",
+                theme: "#ff3366",
+                targetZ: -200,
+                camPos: { x: 30, y: -5, z: -180 },
+                camLook: { x: 0, y: 0, z: -200 },
+                stats: { rounds: "28", dfa: "Core", sbox: "Inv-NLS S-Box" },
+                btnText: "Enter Initial Layer",
+                endRound: 28
+            },
+            {
+                title: "04. Initial DEFAULT-LAYER⁻¹",
+                desc: "Reversing the first layer (Rounds 27 to 0). It again applies Inverse LS S-boxes to finish reverting back to plaintext.",
+                theme: "#00f2fe",
+                targetZ: -100,
+                camPos: { x: -25, y: 15, z: -80 },
+                camLook: { x: 0, y: 0, z: -100 },
+                stats: { rounds: "0", dfa: "≥ 2^64", sbox: "Inv-LS S-Box" },
+                btnText: "Show Plaintext",
+                endRound: 0
+            },
+            {
+                title: "05. Plaintext Output",
+                desc: "The decryption is complete. We have successfully reconstructed the 128-bit original plaintext.",
+                theme: "#ffffff",
+                targetZ: 0,
+                camPos: { x: 12, y: 8, z: 15 },
+                camLook: { x: 0, y: 0, z: 0 },
+                stats: { rounds: "Total 80", dfa: "N/A", sbox: "Final State" },
+                btnText: "Finish",
+                endRound: 0
+            }
+        ];
+
+        const stepDataAtk = [
+            {
+                title: "01. Preparing Attack State",
+                desc: "We initialize the cipher to perform an Information-Combining Differential Fault Attack (IC-DFA). The key space starts at 2^128.",
+                theme: "#ffcc00",
+                targetZ: 0,
+                camPos: { x: 12, y: 8, z: 15 },
+                camLook: { x: 0, y: 0, z: 0 },
+                stats: { rounds: "0", dfa: "Start", sbox: "Targeting LS" },
+                btnText: "Start Simulation",
+                endRound: 52 // Fast forward to the end rounds where faults are injected
+            },
+            {
+                title: "02. Single-Round DFA",
+                desc: "A fault is injected near the end of the cipher. Due to the linear structures, many keys produce the same differences. We extract an EQUIVALENT KEY CLASS (key space reduced to 2^64).",
+                theme: "#ff3300",
+                targetZ: -300,
+                camPos: { x: -15, y: 20, z: -280 },
+                camLook: { x: 0, y: 0, z: -300 },
+                stats: { rounds: "79", dfa: "2^64", sbox: "Equiv Found" },
+                btnText: "Extract Equations",
+                endRound: 79
+            },
+            {
+                title: "03. Normalized Keys",
+                desc: "We formalize the equivalent key classes into a system of linear equations called Normalized Keys. This allows algebraic combination over multiple rounds.",
+                theme: "#00f2fe",
+                targetZ: -300,
+                camPos: { x: 0, y: 30, z: -300 },
+                camLook: { x: 0, y: 0, z: -300 },
+                stats: { rounds: "79", dfa: "2^64", sbox: "Linear Eq" },
+                btnText: "Combine Information",
+                endRound: 79
+            },
+            {
+                title: "04. Recursive Information Combining",
+                desc: "By injecting more faults at different rounds, we intersect the resulting linear equations. The strong key schedule's properties are exploited to collapse the equivalent classes.",
+                theme: "#ff3366",
+                targetZ: -150,
+                camPos: { x: 30, y: -5, z: -180 },
+                camLook: { x: 0, y: 0, z: -200 },
+                stats: { rounds: "< 100", dfa: "Collapsing", sbox: "Intersect" },
+                btnText: "Recover Master Key",
+                endRound: 80
+            },
+            {
+                title: "05. Full Key Recovery",
+                desc: "The IC-DFA succeeds. The full 128-bit master key is algebraically recovered, completely bypassing the 2^64 brute-force threshold claimed by the original cipher design.",
+                theme: "#00ff66",
+                targetZ: -400,
+                camPos: { x: 0, y: 10, z: -360 },
+                camLook: { x: 0, y: 0, z: -400 },
+                stats: { rounds: "Total", dfa: "Broken (1)", sbox: "Full Key" },
+                btnText: "Finish",
+                endRound: 80
+            }
+        ];
+
+
         let currentStep = 0;
 
         // UI DOM Elements
@@ -656,6 +871,34 @@
         const cryptoTerminal = document.getElementById('crypto-terminal');
         const termContent = document.getElementById('term-content');
         const termRoundIndicator = document.getElementById('term-round-indicator');
+
+        const tabEnc = document.getElementById('tab-enc');
+        const tabDec = document.getElementById('tab-dec');
+        const inputLbl = document.getElementById('input-lbl');
+
+        tabEnc.addEventListener('click', () => {
+            currentMode = 'ENC';
+            tabEnc.classList.add('active');
+            tabDec.classList.remove('active'); tabAtk.classList.remove('active');
+            inputLbl.innerText = "Plaintext Input (128-bit Hex)";
+            goToStep(0);
+        });
+        tabDec.addEventListener('click', () => {
+            currentMode = 'DEC';
+            tabDec.classList.add('active');
+            tabEnc.classList.remove('active'); tabAtk.classList.remove('active');
+            inputLbl.innerText = "Ciphertext Input (128-bit Hex)";
+            goToStep(0);
+        });
+        const tabAtk = document.getElementById('tab-atk');
+        tabAtk.addEventListener('click', () => {
+            currentMode = 'ATK';
+            tabAtk.classList.add('active');
+            tabEnc.classList.remove('active');
+            tabDec.classList.remove('active');
+            inputLbl.innerText = "Target Key Extraction Simulation";
+            goToStep(0);
+        });
 
         // Three.js Setup
         const container = document.getElementById('canvas-container');
@@ -826,7 +1069,7 @@
         // --------------------------------------------------------
 
         function updateUI(stepIndex) {
-            const data = stepData[stepIndex];
+            const data = ((currentMode === 'ENC') ? stepDataEnc : ((currentMode === 'DEC') ? stepDataDec : stepDataAtk))[stepIndex];
             
             titleEl.style.color = data.theme;
             visorData.style.borderColor = data.theme;
@@ -854,7 +1097,7 @@
             });
 
             btnPrev.disabled = stepIndex === 0;
-            btnNext.disabled = stepIndex === stepData.length - 1;
+            btnNext.disabled = stepIndex === ((currentMode === 'ENC') ? stepDataEnc : ((currentMode === 'DEC') ? stepDataDec : stepDataAtk)).length - 1;
             
             if (stepIndex > 0) {
                 gsap.to(statsPanel, { opacity: 1, duration: 0.5 });
@@ -891,12 +1134,12 @@
                 
                 cipher.loadPlaintext(ptInput.value);
                 currentStateVal.innerText = cipher.getStateHex();
-                animatedRound = 0;
+                animatedRound = currentMode === 'DEC' ? 80 : 0;
                 termContent.innerHTML = '<div style="color: rgba(255,255,255,0.4)">> Waiting for mathematical execution...</div>';
             }
             
             if(stepIndex > 0) {
-                if(animatedRound === 0) {
+                if( ((currentMode === 'ENC' || currentMode === 'ATK') && animatedRound === 0) || (currentMode === 'DEC' && animatedRound === 80) ) {
                     cipher.loadPlaintext(ptInput.value);
                 }
                 currentRoundTarget = data.endRound;
@@ -906,7 +1149,7 @@
 
         function triggerVisorPulse() {
             gsap.fromTo(visorData, 
-                { boxShadow: "0 0 40px " + stepData[currentStep].theme },
+                { boxShadow: "0 0 40px " + ((currentMode === 'ENC') ? stepDataEnc : ((currentMode === 'DEC') ? stepDataDec : stepDataAtk))[currentStep].theme },
                 { boxShadow: "0 0 20px rgba(0, 242, 254, 0.2)", duration: 0.5 }
             );
         }
@@ -920,9 +1163,9 @@
         }
 
         function goToStep(stepIndex) {
-            if (stepIndex < 0 || stepIndex >= stepData.length) return;
+            if (stepIndex < 0 || stepIndex >= ((currentMode === 'ENC') ? stepDataEnc : ((currentMode === 'DEC') ? stepDataDec : stepDataAtk)).length) return;
             currentStep = stepIndex;
-            const data = stepData[stepIndex];
+            const data = ((currentMode === 'ENC') ? stepDataEnc : ((currentMode === 'DEC') ? stepDataDec : stepDataAtk))[stepIndex];
 
             gsap.to(blockGroup.position, { z: data.targetZ, duration: 2.5, ease: "power2.inOut" });
 
@@ -967,6 +1210,31 @@
         const clock = new THREE.Clock();
         let lastCryptoTime = 0;
 
+        function triggerFault() {
+            // Flash a random block red
+            const blockIdx = Math.floor(Math.random() * 16);
+            const origEmissiveR = blockMaterials[blockIdx].emissive.r;
+            
+            gsap.to(blockMaterials[blockIdx].color, { r: 1, g: 0, b: 0, duration: 0.1, yoyo: true, repeat: 5, onComplete: () => {
+                const targetColor = new THREE.Color(stepDataAtk[currentStep].theme);
+                blockMaterials[blockIdx].color.copy(targetColor);
+            }});
+            gsap.to(blockMaterials[blockIdx].emissive, { r: 1, g: 0.2, b: 0.2, duration: 0.1, yoyo: true, repeat: 5, onComplete: () => {
+                blockMaterials[blockIdx].emissive.r = origEmissiveR;
+            }});
+            
+            // Screen shake
+            gsap.to(camera.position, {
+                x: camera.position.x + (Math.random()-0.5)*2, 
+                y: camera.position.y + (Math.random()-0.5)*2,
+                duration: 0.05, yoyo: true, repeat: 5,
+                onComplete: () => {
+                    const data = stepDataAtk[currentStep];
+                    gsap.to(camera.position, { x: data.camPos.x, y: data.camPos.y, z: data.camPos.z, duration: 0.5 });
+                }
+            });
+        }
+
         function animate() {
             requestAnimationFrame(animate);
             const time = clock.getElapsedTime();
@@ -992,8 +1260,15 @@
             }
             particles.geometry.attributes.position.needsUpdate = true;
 
-            // Live Crypto Execution
-            if (isAnimatingCrypto && currentStep > 0 && animatedRound < currentRoundTarget) {
+                        // Live Crypto Execution
+                        let isNotDone = false;
+            if (currentMode === 'ENC' || currentMode === 'ATK') {
+                isNotDone = animatedRound < currentRoundTarget;
+            } else {
+                isNotDone = animatedRound > currentRoundTarget;
+            }
+            
+            if (isAnimatingCrypto && currentStep > 0 && isNotDone) {
                 
                 // Slow mode checks
                 const isSlowMode = chkSlowMode.checked;
@@ -1002,53 +1277,128 @@
                 if (time - lastCryptoTime > delay) {
                     
                     if (isSlowMode) {
-                        // Breakdown the mathematical phases
-                        if (cryptoPhase === 0) {
-                            const layerCls = (animatedRound < 28 || animatedRound >= 52) ? 'ls' : '';
-                            const layerTxt = (animatedRound < 28 || animatedRound >= 52) ? 'LAYER (LS)' : 'CORE (NLS)';
-                            
-                            termRoundIndicator.innerText = `R${animatedRound} | Phase 1/4`;
-                            pushTerminalLog(`<br><div class="log-round ${layerCls}">> ROUND ${animatedRound} | ${layerTxt}</div>`);
-                            
-                            cipher.applySubCells(animatedRound);
-                            pushTerminalLog(`<div class="log-phase">1. SubCells (S-Box Array Applied)</div><div class="log-data">${cipher.getStateHex()}</div>`);
-                            
-                            cryptoPhase = 1;
+                        if (currentMode === 'ATK') {
+                            if (currentStep === 1) {
+                                animatedRound++;
+                                if (animatedRound >= currentRoundTarget) {
+                                    triggerFault();
+                                    pushTerminalLog(`<br><div class="log-round" style="color:#ff3300">> FAULT INJECTED @ R78</div>`);
+                                    pushTerminalLog(`<div class="log-phase">Observation: ΔC acquired</div>`);
+                                    pushTerminalLog(`<div class="log-data">Key space reduced: 2^128 -> 2^64</div>`);
+                                }
+                            } else if (currentStep === 2) {
+                                pushTerminalLog(`<br><div class="log-phase" style="color:#00f2fe">> NORMALIZING KEYS:</div>`);
+                                pushTerminalLog(`<div class="log-data">L(K) ⊕ K' = C1</div>`);
+                                pushTerminalLog(`<div class="log-data">L(K) ⊕ K'' = C2</div>`);
+                                pushTerminalLog(`<div class="log-highlight">+ Equivalent class defined algebraically</div>`);
+                                animatedRound = 79;
+                            } else if (currentStep === 3) {
+                                triggerFault();
+                                pushTerminalLog(`<br><div class="log-round" style="color:#ff3300">> FAULTS EXECUTED (Multiple Rounds)</div>`);
+                                pushTerminalLog(`<div class="log-data">> Reversing Key Schedule...</div>`);
+                                pushTerminalLog(`<div class="log-data">K_r ⊕ L(C) = K_{r-1}</div>`);
+                                pushTerminalLog(`<div class="log-highlight">+ Intersecting Linear Equations</div>`);
+                                animatedRound = 80;
+                            } else if (currentStep === 4) {
+                                pushTerminalLog(`<br><div class="log-round" style="color:#00ff66">> FULL KEY RECOVERY SUCCESS</div>`);
+                                pushTerminalLog(`<div class="log-data">Master Key K Recovered.</div>`);
+                                pushTerminalLog(`<div class="log-highlight">K: A3 F1 09 D4 ... 3E B2</div>`);
+                                animatedRound = 80;
+                            }
+                        } else if (currentMode === 'ENC') {
+                            if (cryptoPhase === 0) {
+                                const layerCls = (animatedRound < 28 || animatedRound >= 52) ? 'ls' : '';
+                                const layerTxt = (animatedRound < 28 || animatedRound >= 52) ? 'LAYER (LS)' : 'CORE (NLS)';
+                                
+                                termRoundIndicator.innerText = `R${animatedRound} | Phase 1/4`;
+                                pushTerminalLog(`<br><div class="log-round ${layerCls}">> ROUND ${animatedRound} | ${layerTxt}</div>`);
+                                
+                                cipher.applySubCells(animatedRound);
+                                pushTerminalLog(`<div class="log-phase">1. SubCells (S-Box Array Applied)</div><div class="log-data">${cipher.getStateHex()}</div>`);
+                                
+                                cryptoPhase = 1;
 
-                        } else if (cryptoPhase === 1) {
-                            termRoundIndicator.innerText = `R${animatedRound} | Phase 2/4`;
-                            cipher.applyPermBits();
-                            pushTerminalLog(`<div class="log-phase">2. PermBits (GIFT-128 P128 Mapping)</div><div class="log-data">${cipher.getStateHex()}</div>`);
-                            cryptoPhase = 2;
+                            } else if (cryptoPhase === 1) {
+                                termRoundIndicator.innerText = `R${animatedRound} | Phase 2/4`;
+                                cipher.applyPermBits();
+                                pushTerminalLog(`<div class="log-phase">2. PermBits (GIFT-128 P128 Mapping)</div><div class="log-data">${cipher.getStateHex()}</div>`);
+                                cryptoPhase = 2;
 
-                        } else if (cryptoPhase === 2) {
-                            termRoundIndicator.innerText = `R${animatedRound} | Phase 3/4`;
-                            const currentLFSR = cipher.lfsr.toString(2).padStart(6, '0');
-                            cipher.applyAddRoundConstants();
-                            pushTerminalLog(`<div class="log-phase">3. AddRoundConst (LFSR: ${currentLFSR})</div><div class="log-data">${cipher.getStateHex()}</div>`);
-                            cryptoPhase = 3;
+                            } else if (cryptoPhase === 2) {
+                                termRoundIndicator.innerText = `R${animatedRound} | Phase 3/4`;
+                                const currentLFSR = cipher.lfsr.toString(2).padStart(6, '0');
+                                cipher.applyAddRoundConstants();
+                                pushTerminalLog(`<div class="log-phase">3. AddRoundConst (LFSR: ${currentLFSR})</div><div class="log-data">${cipher.getStateHex()}</div>`);
+                                cryptoPhase = 3;
 
-                        } else if (cryptoPhase === 3) {
-                            termRoundIndicator.innerText = `R${animatedRound} | Done`;
-                            cipher.applyAddRoundKey(); // Null op in UI logic
-                            pushTerminalLog(`<div class="log-phase">4. AddRoundKey</div><div class="log-highlight">+ Result -> ${cipher.getStateHex()}</div>`);
-                            
-                            animatedRound++;
-                            cryptoPhase = 0; // ready for next round
+                            } else if (cryptoPhase === 3) {
+                                termRoundIndicator.innerText = `R${animatedRound} | Done`;
+                                cipher.applyAddRoundKey(); // Null op in UI logic
+                                pushTerminalLog(`<div class="log-phase">4. AddRoundKey</div><div class="log-highlight">+ Result -> ${cipher.getStateHex()}</div>`);
+                                
+                                animatedRound++;
+                                cryptoPhase = 0; // ready for next round
+                            }
+                        } else {
+                            // Decryption Logic
+                            let r = animatedRound - 1;
+                            if (cryptoPhase === 0) {
+                                const layerCls = (r < 28 || r >= 52) ? 'ls' : '';
+                                const layerTxt = (r < 28 || r >= 52) ? 'LAYER (LS)⁻¹' : 'CORE (NLS)⁻¹';
+                                
+                                termRoundIndicator.innerText = `R${r} | Phase 1/4`;
+                                pushTerminalLog(`<br><div class="log-round ${layerCls}">> ROUND ${r} | ${layerTxt}</div>`);
+                                
+                                cipher.applyAddRoundKey(); 
+                                pushTerminalLog(`<div class="log-phase">1. AddRoundKey</div><div class="log-data">${cipher.getStateHex()}</div>`);
+                                cryptoPhase = 1;
+
+                            } else if (cryptoPhase === 1) {
+                                termRoundIndicator.innerText = `R${r} | Phase 2/4`;
+                                const currentLFSR = lfsrSequence[r].toString(2).padStart(6, '0');
+                                cipher.applyInvAddRoundConstants(r);
+                                pushTerminalLog(`<div class="log-phase">2. InvAddRoundConst (LFSR: ${currentLFSR})</div><div class="log-data">${cipher.getStateHex()}</div>`);
+                                cryptoPhase = 2;
+
+                            } else if (cryptoPhase === 2) {
+                                termRoundIndicator.innerText = `R${r} | Phase 3/4`;
+                                cipher.applyInvPermBits();
+                                pushTerminalLog(`<div class="log-phase">3. InvPermBits (GIFT-128 P128 Mapping)</div><div class="log-data">${cipher.getStateHex()}</div>`);
+                                cryptoPhase = 3;
+
+                            } else if (cryptoPhase === 3) {
+                                termRoundIndicator.innerText = `R${r} | Done`;
+                                cipher.applyInvSubCells(r); 
+                                pushTerminalLog(`<div class="log-phase">4. InvSubCells</div><div class="log-highlight">+ Result -> ${cipher.getStateHex()}</div>`);
+                                
+                                animatedRound--;
+                                cryptoPhase = 0; 
+                            }
                         }
                     } else {
                         // Fast mode: Combine all phases into one tick without heavy logging
-                        cipher.applySubCells(animatedRound);
-                        cipher.applyPermBits();
-                        cipher.applyAddRoundConstants();
-                        cipher.applyAddRoundKey();
-                        
-                        pushTerminalLog(`<div style="color: rgba(255,255,255,0.3)">> R${animatedRound} EXECUTED FAST -> ${cipher.getStateHex()}</div>`);
-                        animatedRound++;
+                        if (currentMode === 'ATK') {
+                            animatedRound++;
+                        } else if (currentMode === 'ENC') {
+                            cipher.applySubCells(animatedRound);
+                            cipher.applyPermBits();
+                            cipher.applyAddRoundConstants();
+                            cipher.applyAddRoundKey();
+                            pushTerminalLog(`<div style="color: rgba(255,255,255,0.3)">> R${animatedRound} EXECUTED FAST -> ${cipher.getStateHex()}</div>`);
+                            animatedRound++;
+                        } else {
+                            let r = animatedRound - 1;
+                            cipher.applyAddRoundKey();
+                            cipher.applyInvAddRoundConstants(r);
+                            cipher.applyInvPermBits();
+                            cipher.applyInvSubCells(r);
+                            pushTerminalLog(`<div style="color: rgba(255,255,255,0.3)">> R${r} EXECUTED FAST -> ${cipher.getStateHex()}</div>`);
+                            animatedRound--;
+                        }
                     }
                     
                     // After advancing a step or phase, update global UI Visor
-                    stateLabel.innerText = `Current State (Round ${animatedRound})`;
+                    stateLabel.innerText = currentMode === 'ENC' ? `Current State (Round ${animatedRound})` : `Current State (Next Round: ${animatedRound})`;
                     currentStateVal.innerText = cipher.getStateHex();
                     triggerVisorPulse();
 
@@ -1060,7 +1410,11 @@
                         blockMaterials[15-i].emissiveIntensity = intensity;
                     }
 
-                    if(animatedRound >= currentRoundTarget && cryptoPhase === 0) {
+                    let doneCheck = false;
+                    if ((currentMode === 'ENC' || currentMode === 'ATK') && animatedRound >= currentRoundTarget) doneCheck = true;
+                    if (currentMode === 'DEC' && animatedRound <= currentRoundTarget) doneCheck = true;
+
+                    if(doneCheck && cryptoPhase === 0) {
                         isAnimatingCrypto = false;
                         termRoundIndicator.innerText = "Execution Paused";
                         pushTerminalLog(`<br><div class="log-round">> WAIT CONDITION SATISFIED</div>`);
