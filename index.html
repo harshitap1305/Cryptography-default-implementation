@@ -16,6 +16,9 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+    <!-- Attack Simulation Engine -->
+    <script src="attack_engine.js"></script>
+    <script src="attack_ui.js"></script>
 
     <style>
         :root {
@@ -404,6 +407,380 @@
             opacity: 0;
             transition: opacity 0.5s;
         }
+        /* ====== ATTACK MODE UI ====== */
+        #atk-panel {
+            pointer-events: auto;
+            position: absolute;
+            top: 30px;
+            right: 20px;
+            width: 360px;
+            max-height: calc(100vh - 60px);
+            overflow-y: auto;
+            display: none;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 15;
+            padding-right: 4px;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255,200,0,0.3) transparent;
+        }
+        #atk-panel::-webkit-scrollbar { width: 4px; }
+        #atk-panel::-webkit-scrollbar-track { background: transparent; }
+        #atk-panel::-webkit-scrollbar-thumb { background: rgba(255,200,0,0.3); border-radius: 2px; }
+        #atk-panel.visible { display: flex; }
+
+        .atk-card {
+            background: rgba(8, 8, 18, 0.92);
+            border: 1px solid rgba(255, 200, 0, 0.18);
+            border-radius: 10px;
+            padding: 12px 14px;
+            font-family: 'JetBrains Mono', monospace;
+            backdrop-filter: blur(16px);
+            flex-shrink: 0;
+            position: relative;
+            overflow: hidden;
+        }
+        .atk-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255,200,0,0.5), transparent);
+        }
+        .atk-card-title {
+            font-size: 9px;
+            color: rgba(255, 204, 0, 0.85);
+            text-transform: uppercase;
+            letter-spacing: 2.5px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .atk-card-title .badge {
+            font-size: 8px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            background: rgba(255, 51, 102, 0.2);
+            color: #ff6688;
+            border: 1px solid rgba(255, 51, 102, 0.3);
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+        .atk-card-title .badge.safe {
+            background: rgba(0, 255, 102, 0.15);
+            color: #00ff66;
+            border-color: rgba(0, 255, 102, 0.3);
+        }
+
+        /* Phase Tracker */
+        .phase-tracker {
+            display: flex;
+            gap: 3px;
+            margin-bottom: 6px;
+        }
+        .phase-step {
+            flex: 1;
+            height: 3px;
+            border-radius: 2px;
+            background: rgba(255, 255, 255, 0.08);
+            transition: all 0.5s ease;
+        }
+        .phase-step.done {
+            background: rgba(0, 255, 102, 0.5);
+            box-shadow: 0 0 4px rgba(0, 255, 102, 0.3);
+        }
+        .phase-step.active {
+            background: linear-gradient(90deg, #ffcc00, #ff6600);
+            box-shadow: 0 0 8px rgba(255, 200, 0, 0.4);
+            animation: phaseGlow 1.5s ease infinite;
+        }
+        @keyframes phaseGlow {
+            0%, 100% { box-shadow: 0 0 4px rgba(255, 200, 0, 0.3); }
+            50% { box-shadow: 0 0 10px rgba(255, 200, 0, 0.6); }
+        }
+        .phase-label {
+            font-size: 9px;
+            color: rgba(255, 255, 255, 0.4);
+            margin-top: 4px;
+            text-align: center;
+            transition: color 0.3s;
+        }
+        .phase-label.active-label { color: #ffcc00; font-weight: bold; }
+
+        /* Key Space Gauge */
+        .gauge-track {
+            width: 100%;
+            height: 28px;
+            background: rgba(255,255,255,0.04);
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.08);
+            position: relative;
+        }
+        .gauge-track::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: repeating-linear-gradient(90deg, transparent, transparent 10px, rgba(255,255,255,0.03) 10px, rgba(255,255,255,0.03) 11px);
+            pointer-events: none;
+        }
+        .gauge-fill {
+            height: 100%;
+            width: 100%;
+            border-radius: 6px;
+            background: linear-gradient(90deg, #ff3366, #ff0000);
+            transition: width 1.5s cubic-bezier(0.22, 1, 0.36, 1), background 1s ease;
+            position: relative;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.15);
+        }
+        .gauge-fill::after {
+            content: '';
+            position: absolute;
+            right: -1px; top: 0; bottom: 0; width: 3px;
+            background: #fff;
+            box-shadow: 0 0 10px #fff, 0 0 20px currentColor;
+            border-radius: 2px;
+        }
+        .gauge-bottom {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-top: 6px;
+        }
+        #atk-keyspace-label {
+            font-size: 22px;
+            font-weight: bold;
+            color: #ff3366;
+            transition: color 0.5s;
+            line-height: 1;
+        }
+        .gauge-pct {
+            font-size: 11px;
+            color: rgba(255,255,255,0.5);
+            font-weight: bold;
+        }
+
+        /* Nibble Grid */
+        .nibble-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+        .nibble-counter {
+            font-size: 10px;
+            color: rgba(255,255,255,0.5);
+        }
+        .nibble-counter .solved-count { color: #00ff66; font-weight: bold; }
+        .nibble-counter .total-count { color: rgba(255,255,255,0.3); }
+        #atk-nibble-grid {
+            display: grid;
+            grid-template-columns: repeat(16, 1fr);
+            gap: 2px;
+        }
+        .nibble-cell {
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 8px;
+            font-weight: bold;
+            border-radius: 3px;
+            transition: all 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+            border: 1px solid transparent;
+            cursor: default;
+        }
+        .nibble-cell.unknown {
+            background: rgba(255, 51, 102, 0.15);
+            border-color: rgba(255, 51, 102, 0.2);
+            color: #ff6688;
+        }
+        .nibble-cell.narrowed {
+            background: rgba(255, 200, 0, 0.2);
+            border-color: rgba(255, 200, 0, 0.3);
+            color: #ffdd44;
+        }
+        .nibble-cell.solved {
+            background: rgba(0, 255, 102, 0.2);
+            border-color: rgba(0, 255, 102, 0.4);
+            color: #00ff66;
+            box-shadow: 0 0 6px rgba(0, 255, 102, 0.25);
+            animation: solvedPulse 2s ease infinite;
+        }
+        @keyframes solvedPulse {
+            0%, 100% { box-shadow: 0 0 4px rgba(0, 255, 102, 0.2); }
+            50% { box-shadow: 0 0 10px rgba(0, 255, 102, 0.5); }
+        }
+        .nibble-legend {
+            display: flex; gap: 10px; margin-top: 6px; justify-content: center;
+        }
+        .nibble-legend-item {
+            display: flex; align-items: center; gap: 4px;
+            font-size: 8px; color: rgba(255,255,255,0.4);
+        }
+        .nibble-legend-dot {
+            width: 6px; height: 6px; border-radius: 2px;
+        }
+        .nibble-legend-dot.lg-unknown { background: rgba(255, 51, 102, 0.5); }
+        .nibble-legend-dot.lg-narrowed { background: rgba(255, 200, 0, 0.5); }
+        .nibble-legend-dot.lg-solved { background: rgba(0, 255, 102, 0.5); }
+
+        /* Equation System */
+        .eq-header {
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .eq-status-pill {
+            font-size: 8px; padding: 2px 8px; border-radius: 10px;
+            font-weight: bold; letter-spacing: 1px; text-transform: uppercase;
+        }
+        .eq-status-pill.building {
+            background: rgba(255, 200, 0, 0.15); color: #ffcc00;
+            border: 1px solid rgba(255, 200, 0, 0.3);
+        }
+        .eq-status-pill.solving {
+            background: rgba(0, 242, 254, 0.15); color: #00f2fe;
+            border: 1px solid rgba(0, 242, 254, 0.3);
+            animation: solvePulse 1s ease infinite;
+        }
+        .eq-status-pill.solved {
+            background: rgba(0, 255, 102, 0.15); color: #00ff66;
+            border: 1px solid rgba(0, 255, 102, 0.3);
+        }
+        @keyframes solvePulse {
+            0%, 100% { opacity: 1; } 50% { opacity: 0.5; }
+        }
+        .eq-grid {
+            display: grid; grid-template-columns: 1fr 1fr;
+            gap: 4px 12px; margin-top: 8px;
+        }
+        .eq-metric { display: flex; flex-direction: column; }
+        .eq-metric-label {
+            font-size: 8px; color: rgba(255,255,255,0.35);
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        .eq-metric-value {
+            font-size: 16px; font-weight: bold;
+            color: #00f2fe; line-height: 1.2;
+        }
+        .eq-bar-track {
+            width: 100%; height: 6px;
+            background: rgba(255,255,255,0.04);
+            border-radius: 3px; margin-top: 8px; overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.06);
+        }
+        .eq-bar-fill {
+            height: 100%; width: 0%;
+            background: linear-gradient(90deg, #00f2fe, #00ff66);
+            border-radius: 3px;
+            transition: width 1.5s cubic-bezier(0.22, 1, 0.36, 1);
+            box-shadow: 0 0 8px rgba(0, 242, 254, 0.3);
+        }
+        .eq-pct {
+            font-size: 9px; color: rgba(255,255,255,0.4);
+            text-align: right; margin-top: 3px;
+        }
+        .eq-pct span { color: #00f2fe; font-weight: bold; }
+
+        /* Differential Display */
+        #atk-diff-display { display: none; font-size: 10px; }
+        .diff-row {
+            display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
+        }
+        .diff-label {
+            color: rgba(255,255,255,0.45); min-width: 28px;
+            font-weight: bold; font-size: 9px;
+        }
+        .diff-hex { display: flex; gap: 0; flex-wrap: wrap; }
+        .diff-hex span {
+            padding: 1px 2px; border-radius: 2px;
+            transition: all 0.4s; font-size: 9px;
+        }
+        .diff-hex .nibble-sep { width: 3px; display: inline-block; }
+        .diff-active { background: rgba(255, 51, 0, 0.25); color: #ff6644; }
+        .diff-nonzero {
+            background: rgba(255, 200, 0, 0.35); color: #ffdd00;
+            font-weight: bold; text-shadow: 0 0 4px rgba(255, 200, 0, 0.5);
+        }
+        .diff-zero { color: rgba(255,255,255,0.15); }
+        .diff-summary {
+            margin-top: 6px; padding-top: 6px;
+            border-top: 1px solid rgba(255,255,255,0.06);
+            display: flex; justify-content: space-between;
+            font-size: 9px; color: rgba(255,255,255,0.4);
+        }
+        .diff-summary .active-count { color: #ffcc00; font-weight: bold; }
+
+        /* Linear Structures Table */
+        #atk-ls-display { display: none; margin-top: 8px; }
+        .ls-table {
+            width: 100%; border-collapse: collapse; font-size: 9px;
+        }
+        .ls-table th {
+            color: rgba(255, 204, 0, 0.7); text-align: left;
+            padding: 4px 6px; border-bottom: 1px solid rgba(255,200,0,0.2);
+            font-size: 8px; text-transform: uppercase; letter-spacing: 1px;
+        }
+        .ls-table td {
+            padding: 3px 6px; color: #d0d0d0;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+        }
+        .ls-table tr:hover td { background: rgba(255,200,0,0.05); }
+        .ls-note {
+            margin-top: 8px; font-size: 9px; color: #ff9900; font-style: italic;
+            padding: 6px 8px; background: rgba(255, 153, 0, 0.08);
+            border-radius: 4px; border-left: 2px solid rgba(255, 153, 0, 0.4);
+        }
+
+        /* DDT Display */
+        .ddt-entry { font-size: 10px; color: #a0a0b0; padding: 4px 0; }
+        .ddt-val { font-weight: bold; }
+        .ddt-hit { color: #00ff66; }
+        .ddt-miss { color: #ff3366; }
+
+        /* Attack Terminal Override — move to left side below info panel */
+        .atk-terminal {
+            right: auto !important;
+            left: 40px !important;
+            top: auto !important;
+            bottom: 20px !important;
+            width: 580px !important;
+            height: 280px !important;
+            border-color: rgba(255, 200, 0, 0.3) !important;
+        }
+        .atk-terminal .term-header {
+            background: rgba(255, 200, 0, 0.1) !important;
+            color: #ffcc00 !important;
+            border-bottom-color: rgba(255, 200, 0, 0.2) !important;
+        }
+
+        /* Screen glitch effect for fault injection */
+        @keyframes glitchShake {
+            0% { transform: translate(0); filter: hue-rotate(0deg); }
+            10% { transform: translate(-3px, 2px); filter: hue-rotate(90deg); }
+            20% { transform: translate(3px, -2px); filter: hue-rotate(-90deg); }
+            30% { transform: translate(-1px, 1px); filter: hue-rotate(45deg); }
+            40% { transform: translate(2px, -1px); }
+            50% { transform: translate(-2px, 2px); filter: hue-rotate(-45deg); }
+            60% { transform: translate(1px, 0); }
+            70% { transform: translate(-1px, -2px); filter: hue-rotate(20deg); }
+            80% { transform: translate(2px, 1px); }
+            90% { transform: translate(0, -1px); filter: hue-rotate(0deg); }
+            100% { transform: translate(0); filter: hue-rotate(0deg); }
+        }
+        .glitch-active {
+            animation: glitchShake 0.3s ease-in-out;
+        }
+        /* Red vignette overlay for fault */
+        #fault-vignette {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            pointer-events: none;
+            z-index: 100;
+            opacity: 0;
+            background: radial-gradient(ellipse at center, transparent 50%, rgba(255,0,0,0.6) 100%);
+            transition: opacity 0.15s;
+        }
+        #fault-vignette.flash { opacity: 1; }
     </style>
 </head>
 <body>
@@ -414,8 +791,81 @@
         <div class="loader-text">INITIALIZING QUANTUM STATE...</div>
     </div>
 
+    <!-- Fault Injection VFX Overlay -->
+    <div id="fault-vignette"></div>
+
     <!-- WebGL Canvas -->
     <div id="canvas-container"></div>
+
+    <!-- Attack Mode UI Panel (shown only in ATK mode) -->
+    <div id="atk-panel">
+        <!-- Phase Tracker -->
+        <div class="atk-card" id="atk-phase-card">
+            <div class="atk-card-title">
+                <span>⚔ Attack Phase</span>
+                <span class="badge" id="atk-phase-badge">ACTIVE</span>
+            </div>
+            <div class="phase-tracker" id="atk-phase-tracker"></div>
+            <div class="phase-label" id="atk-phase-label">Initializing IC-DFA...</div>
+        </div>
+
+        <!-- Key Space Gauge -->
+        <div class="atk-card">
+            <div class="atk-card-title">
+                <span>🔑 Remaining Key Space</span>
+                <span id="atk-keyspace-bits" style="color:#ff3366; font-size:10px;">128 bits</span>
+            </div>
+            <div class="gauge-track">
+                <div class="gauge-fill" id="atk-keyspace-fill"></div>
+            </div>
+            <div class="gauge-bottom">
+                <div id="atk-keyspace-label">2¹²⁸</div>
+                <span class="gauge-pct" id="atk-keyspace-pct">100%</span>
+            </div>
+        </div>
+
+        <!-- Nibble Candidate Grid -->
+        <div class="atk-card">
+            <div class="atk-card-title">
+                <span>🧩 Key Nibble Candidates</span>
+                <span class="nibble-counter"><span class="solved-count" id="atk-solved-count">0</span><span class="total-count">/32 solved</span></span>
+            </div>
+            <div id="atk-nibble-grid"></div>
+            <div class="nibble-legend">
+                <div class="nibble-legend-item"><div class="nibble-legend-dot lg-unknown"></div>16 left</div>
+                <div class="nibble-legend-item"><div class="nibble-legend-dot lg-narrowed"></div>≤4 left</div>
+                <div class="nibble-legend-item"><div class="nibble-legend-dot lg-solved"></div>Solved</div>
+            </div>
+        </div>
+
+        <!-- Equation System -->
+        <div class="atk-card">
+            <div class="eq-header">
+                <div class="atk-card-title" style="margin-bottom:0"><span>📐 Equation System</span></div>
+                <span class="eq-status-pill building" id="atk-eq-status">Waiting</span>
+            </div>
+            <div class="eq-grid">
+                <div class="eq-metric">
+                    <span class="eq-metric-label">Rank</span>
+                    <span class="eq-metric-value" id="atk-eq-rank">0</span>
+                </div>
+                <div class="eq-metric">
+                    <span class="eq-metric-label">Equations</span>
+                    <span class="eq-metric-value" id="atk-eq-total">0</span>
+                </div>
+            </div>
+            <div class="eq-bar-track"><div class="eq-bar-fill" id="atk-eq-bar"></div></div>
+            <div class="eq-pct">Rank completeness: <span id="atk-eq-pct">0%</span></div>
+        </div>
+
+        <!-- Differential Display -->
+        <div class="atk-card">
+            <div class="atk-card-title"><span>⚡ Ciphertext Differential</span></div>
+            <div id="atk-diff-display"></div>
+            <div id="atk-ddt-display"></div>
+            <div id="atk-ls-display"></div>
+        </div>
+    </div>
 
     <!-- UI Overlay -->
     <div id="ui-layer">
@@ -788,59 +1238,100 @@
 
         const stepDataAtk = [
             {
-                title: "01. Preparing Attack State",
-                desc: "We initialize the cipher to perform an Information-Combining Differential Fault Attack (IC-DFA). The key space starts at 2^128.",
+                title: "01. Attack Initialization",
+                desc: "Initializing the IC-DFA attack simulation. A random 128-bit secret key is generated inside the cipher. The attacker's goal: recover this key using only fault injection and ciphertext observation. Key space: 2¹²⁸.",
                 theme: "#ffcc00",
                 targetZ: 0,
                 camPos: { x: 12, y: 8, z: 15 },
                 camLook: { x: 0, y: 0, z: 0 },
-                stats: { rounds: "0", dfa: "Start", sbox: "Targeting LS" },
-                btnText: "Start Simulation",
-                endRound: 52 // Fast forward to the end rounds where faults are injected
+                stats: { rounds: "0", dfa: "2¹²⁸", sbox: "Target: LS" },
+                btnText: "Run Correct Encryption",
+                endRound: 0,
+                atkStep: 'setup'
             },
             {
-                title: "02. Single-Round DFA",
-                desc: "A fault is injected near the end of the cipher. Due to the linear structures, many keys produce the same differences. We extract an EQUIVALENT KEY CLASS (key space reduced to 2^64).",
+                title: "02. Correct Encryption",
+                desc: "Encrypting the plaintext with the unknown secret key. Watch the state traverse all 80 rounds through the sandwich architecture. The resulting ciphertext C is our reference point.",
+                theme: "#00f2fe",
+                targetZ: -200,
+                camPos: { x: -20, y: 12, z: -180 },
+                camLook: { x: 0, y: 0, z: -200 },
+                stats: { rounds: "80", dfa: "2¹²⁸", sbox: "Full Enc" },
+                btnText: "Inject Fault ⚡",
+                endRound: 80,
+                atkStep: 'encrypt'
+            },
+            {
+                title: "03. Fault Injection",
+                desc: "⚡ INJECTING a single-bit fault at Round 76, before the LS S-box. The cipher re-runs with this fault, producing a faulty ciphertext C'. The differential ΔC = C ⊕ C' reveals information about the key.",
                 theme: "#ff3300",
                 targetZ: -300,
                 camPos: { x: -15, y: 20, z: -280 },
                 camLook: { x: 0, y: 0, z: -300 },
-                stats: { rounds: "79", dfa: "2^64", sbox: "Equiv Found" },
-                btnText: "Extract Equations",
-                endRound: 79
+                stats: { rounds: "76", dfa: "Fault!", sbox: "LS S-box" },
+                btnText: "Analyze Differential",
+                endRound: 80,
+                atkStep: 'fault'
             },
             {
-                title: "03. Normalized Keys",
-                desc: "We formalize the equivalent key classes into a system of linear equations called Normalized Keys. This allows algebraic combination over multiple rounds.",
-                theme: "#00f2fe",
+                title: "04. Differential Analysis (DFA)",
+                desc: "Using the DDT of the LS S-box, we filter key candidates per nibble. Each nibble with a non-zero differential eliminates ~75% of key candidates. After one fault: 4 candidates remain per nibble → 2⁶⁴ total.",
+                theme: "#ff6600",
                 targetZ: -300,
-                camPos: { x: 0, y: 30, z: -300 },
+                camPos: { x: 15, y: 25, z: -280 },
                 camLook: { x: 0, y: 0, z: -300 },
-                stats: { rounds: "79", dfa: "2^64", sbox: "Linear Eq" },
-                btnText: "Combine Information",
-                endRound: 79
+                stats: { rounds: "79", dfa: "2⁶⁴", sbox: "DDT Filter" },
+                btnText: "Show Equivalent Keys",
+                endRound: 80,
+                atkStep: 'dfa'
             },
             {
-                title: "04. Recursive Information Combining",
-                desc: "By injecting more faults at different rounds, we intersect the resulting linear equations. The strong key schedule's properties are exploited to collapse the equivalent classes.",
+                title: "05. Equivalent Key Classes",
+                desc: "The LS S-box has 4 linear structures: 0→0, 6→a, 9→f, f→5. For each nibble, keys k, k⊕a, k⊕f, k⊕5 are indistinguishable. This creates equivalence classes of size 4³² = 2⁶⁴ — the barrier DEFAULT claims to provide.",
+                theme: "#ff9900",
+                targetZ: -300,
+                camPos: { x: 0, y: 30, z: -290 },
+                camLook: { x: 0, y: 0, z: -300 },
+                stats: { rounds: "79", dfa: "2⁶⁴", sbox: "Equiv Class" },
+                btnText: "Extract Normalized Keys",
+                endRound: 80,
+                atkStep: 'equiv'
+            },
+            {
+                title: "06. Normalized Key Extraction",
+                desc: "We select a canonical representative (normalized key K̄) from each equivalence class. Normalization is a linear operation: K̄ = A·K. For n round keys, n−1 normalized keys can be recovered uniquely via DFA.",
+                theme: "#00f2fe",
+                targetZ: -200,
+                camPos: { x: -25, y: 15, z: -180 },
+                camLook: { x: 0, y: 0, z: -200 },
+                stats: { rounds: "6 keys", dfa: "2⁶⁴", sbox: "Normalized" },
+                btnText: "Combine Information",
+                endRound: 80,
+                atkStep: 'normalize'
+            },
+            {
+                title: "07. Information Combining",
+                desc: "The key insight: by combining equations from multiple fault rounds, exploiting the rotating key schedule (K₀=K₄, K₁=K₅), and adding normalization constraints, the equation system reaches full rank. Watch the key space collapse!",
                 theme: "#ff3366",
                 targetZ: -150,
-                camPos: { x: 30, y: -5, z: -180 },
-                camLook: { x: 0, y: 0, z: -200 },
-                stats: { rounds: "< 100", dfa: "Collapsing", sbox: "Intersect" },
-                btnText: "Recover Master Key",
-                endRound: 80
+                camPos: { x: 30, y: -5, z: -130 },
+                camLook: { x: 0, y: 0, z: -150 },
+                stats: { rounds: "16 faults", dfa: "Collapsing", sbox: "Intersect" },
+                btnText: "Recover Master Key 🔓",
+                endRound: 80,
+                atkStep: 'combine'
             },
             {
-                title: "05. Full Key Recovery",
-                desc: "The IC-DFA succeeds. The full 128-bit master key is algebraically recovered, completely bypassing the 2^64 brute-force threshold claimed by the original cipher design.",
+                title: "08. Full Key Recovery ✓",
+                desc: "The IC-DFA succeeds! The full 128-bit master key is algebraically recovered with only ~16 faults, completely bypassing the 2⁶⁴ brute-force threshold. The sandwich architecture's DFA resilience claim is broken.",
                 theme: "#00ff66",
                 targetZ: -400,
                 camPos: { x: 0, y: 10, z: -360 },
                 camLook: { x: 0, y: 0, z: -400 },
-                stats: { rounds: "Total", dfa: "Broken (1)", sbox: "Full Key" },
+                stats: { rounds: "Total", dfa: "Broken!", sbox: "Full Key" },
                 btnText: "Finish",
-                endRound: 80
+                endRound: 80,
+                atkStep: 'recover'
             }
         ];
 
@@ -1068,11 +1559,147 @@
         // STATE MACHINE
         // --------------------------------------------------------
 
+        const atkPanel = document.getElementById('atk-panel');
+        const faultVignette = document.getElementById('fault-vignette');
+        let atkICStep = 0; // sub-step counter for information combining
+
+        function getStepData() {
+            return (currentMode === 'ENC') ? stepDataEnc : ((currentMode === 'DEC') ? stepDataDec : stepDataAtk);
+        }
+
+        // Dynamically rebuild dots for the current mode's step count
+        function rebuildDots(count) {
+            const dotsContainer = document.getElementById('dots-container');
+            dotsContainer.innerHTML = '';
+            for (let i = 0; i < count; i++) {
+                const d = document.createElement('div');
+                d.className = 'dot';
+                dotsContainer.appendChild(d);
+            }
+        }
+
+        // Show/hide ATK panel and ENC/DEC visor
+        function toggleAtkPanels(isAtk) {
+            if (isAtk) {
+                atkPanel.classList.add('visible');
+                visorData.style.display = 'none';
+                cryptoTerminal.classList.add('atk-terminal');
+            } else {
+                atkPanel.classList.remove('visible');
+                visorData.style.display = 'block';
+                cryptoTerminal.classList.remove('atk-terminal');
+            }
+        }
+
+        // Enhanced fault VFX with vignette and glitch
+        function triggerFaultVFX(nibbleIdx) {
+            // Red vignette flash
+            faultVignette.classList.add('flash');
+            setTimeout(() => faultVignette.classList.remove('flash'), 300);
+
+            // Screen glitch on canvas
+            const canvasEl = document.getElementById('canvas-container');
+            canvasEl.classList.add('glitch-active');
+            setTimeout(() => canvasEl.classList.remove('glitch-active'), 300);
+
+            // Flash ALL blocks red in sequence
+            blockMaterials.forEach((mat, idx) => {
+                const delay = idx * 0.03;
+                gsap.to(mat.color, { r: 1, g: 0, b: 0, duration: 0.08, delay, yoyo: true, repeat: 3, onComplete: () => {
+                    const tc = new THREE.Color(getStepData()[currentStep].theme);
+                    mat.color.copy(tc);
+                }});
+                gsap.to(mat.emissive, { r: 1, g: 0.1, b: 0.1, duration: 0.08, delay, yoyo: true, repeat: 3 });
+            });
+
+            // Camera shake
+            const data = getStepData()[currentStep];
+            gsap.to(camera.position, {
+                x: camera.position.x + (Math.random()-0.5)*3,
+                y: camera.position.y + (Math.random()-0.5)*3,
+                duration: 0.04, yoyo: true, repeat: 7,
+                onComplete: () => {
+                    gsap.to(camera.position, { x: data.camPos.x, y: data.camPos.y, z: data.camPos.z, duration: 0.6 });
+                }
+            });
+
+            // Bloom flash
+            const origStrength = bloomPass.strength;
+            bloomPass.strength = 3.0;
+            setTimeout(() => { bloomPass.strength = origStrength; }, 400);
+        }
+
+        // Execute attack step logic via AttackUI module
+        function executeAttackStep(stepIndex) {
+            const data = stepDataAtk[stepIndex];
+            if (!data || !data.atkStep) return;
+
+            const ptHex = ptInput.value || '00112233445566778899aabbccddeeff';
+
+            switch (data.atkStep) {
+                case 'setup':
+                    AttackUI.executeStep1_Setup(ptHex);
+                    break;
+                case 'encrypt':
+                    AttackUI.executeStep2_Encrypt(ptHex, (round, stateHex) => {
+                        termRoundIndicator.innerText = `R${round} | Encrypting...`;
+                    });
+                    break;
+                case 'fault':
+                    triggerFaultVFX(0);
+                    setTimeout(() => {
+                        AttackUI.executeStep3_FaultInjection(ptHex);
+                    }, 500);
+                    break;
+                case 'dfa':
+                    AttackUI.executeStep4_DifferentialAnalysis();
+                    break;
+                case 'equiv':
+                    AttackUI.executeStep5_EquivalentKeys();
+                    break;
+                case 'normalize':
+                    AttackUI.executeStep6_NormalizedKeys();
+                    break;
+                case 'combine':
+                    atkICStep = 0;
+                    runICAnimation();
+                    break;
+                case 'recover':
+                    AttackUI.executeStep8_KeyRecovery();
+                    // Success VFX: all blocks turn green
+                    blockMaterials.forEach((mat, idx) => {
+                        gsap.to(mat.color, { r: 0.1, g: 1, b: 0.4, duration: 0.5, delay: idx * 0.05 });
+                        gsap.to(mat.emissive, { r: 0, g: 1, b: 0.4, duration: 0.5, delay: idx * 0.05 });
+                    });
+                    bloomPass.strength = 2.0;
+                    break;
+            }
+        }
+
+        // Animated information combining — runs 5 sub-steps with delays
+        function runICAnimation() {
+            if (atkICStep >= 5) return;
+            triggerFaultVFX(Math.floor(Math.random() * 16));
+            setTimeout(() => {
+                AttackUI.executeStep7_InformationCombining(atkICStep);
+                atkICStep++;
+                if (atkICStep < 5) {
+                    setTimeout(runICAnimation, 1200);
+                }
+            }, 600);
+        }
+
         function updateUI(stepIndex) {
-            const data = ((currentMode === 'ENC') ? stepDataEnc : ((currentMode === 'DEC') ? stepDataDec : stepDataAtk))[stepIndex];
+            const steps = getStepData();
+            const data = steps[stepIndex];
+            const isAtk = currentMode === 'ATK';
+
+            // Rebuild dots for current step count
+            rebuildDots(steps.length);
+            const currentDots = document.querySelectorAll('.dot');
             
             titleEl.style.color = data.theme;
-            visorData.style.borderColor = data.theme;
+            if (!isAtk) visorData.style.borderColor = data.theme;
             currentStateVal.style.color = data.theme;
             btnNext.innerHTML = `${data.btnText} <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>`;
 
@@ -1084,62 +1711,76 @@
                 }
             });
 
-            dots.forEach((dot, idx) => {
-                dot.className = "dot";
+            currentDots.forEach((dot, idx) => {
+                dot.className = 'dot';
                 if (idx === stepIndex) {
-                    dot.classList.add("active");
-                    if (data.theme === "#ff3366") dot.classList.add("core");
+                    dot.classList.add('active');
+                    if (data.theme === '#ff3366' || data.theme === '#ff3300') dot.classList.add('core');
                 } else if (idx < stepIndex) {
-                    dot.style.background = "rgba(255,255,255,0.4)";
+                    dot.style.background = 'rgba(255,255,255,0.4)';
                 } else {
-                    dot.style.background = "rgba(255,255,255,0.2)";
+                    dot.style.background = 'rgba(255,255,255,0.2)';
                 }
             });
 
             btnPrev.disabled = stepIndex === 0;
-            btnNext.disabled = stepIndex === ((currentMode === 'ENC') ? stepDataEnc : ((currentMode === 'DEC') ? stepDataDec : stepDataAtk)).length - 1;
+            btnNext.disabled = stepIndex === steps.length - 1;
+
+            // Toggle panel visibility
+            toggleAtkPanels(isAtk);
             
             if (stepIndex > 0) {
                 gsap.to(statsPanel, { opacity: 1, duration: 0.5 });
                 ptInput.disabled = true;
                 chkSlowMode.disabled = true;
-                stateContainer.style.opacity = "1";
-                visorStatus.innerText = "ACTIVE";
-                visorStatus.style.color = "#00ff66";
-                visorStatus.style.background = "rgba(0, 255, 102, 0.2)";
-                cryptoTerminal.style.opacity = "1";
+                stateContainer.style.opacity = '1';
+                visorStatus.innerText = 'ACTIVE';
+                visorStatus.style.color = '#00ff66';
+                visorStatus.style.background = 'rgba(0, 255, 102, 0.2)';
+                cryptoTerminal.style.opacity = '1';
                 
                 const proxy = { r: parseInt(statRounds.innerText) || 0 };
                 const targetR = parseInt(data.stats.rounds) || 0;
+                const isFinal = stepIndex === steps.length - 1;
                 gsap.to(proxy, {
                     r: targetR,
                     duration: 1,
-                    roundProps: "r",
-                    onUpdate: () => { statRounds.innerText = proxy.r + (stepIndex===4 ? " Total" : ""); }
+                    roundProps: 'r',
+                    onUpdate: () => { statRounds.innerText = proxy.r + (isFinal ? ' Total' : ''); }
                 });
                 statDfa.innerText = data.stats.dfa;
                 statSbox.innerText = data.stats.sbox;
                 statRounds.style.color = data.theme;
                 statDfa.style.color = data.theme;
                 statSbox.style.color = data.theme;
+
+                // Execute attack step logic if in ATK mode
+                if (isAtk) {
+                    executeAttackStep(stepIndex);
+                }
             } else {
                 gsap.to(statsPanel, { opacity: 0, duration: 0.5 });
                 ptInput.disabled = false;
                 chkSlowMode.disabled = false;
-                stateContainer.style.opacity = "0.5";
-                visorStatus.innerText = "WAITING";
-                visorStatus.style.color = "var(--primary)";
-                visorStatus.style.background = "rgba(0, 242, 254, 0.2)";
-                cryptoTerminal.style.opacity = "0";
+                stateContainer.style.opacity = '0.5';
+                visorStatus.innerText = 'WAITING';
+                visorStatus.style.color = 'var(--primary)';
+                visorStatus.style.background = 'rgba(0, 242, 254, 0.2)';
+                cryptoTerminal.style.opacity = '0';
                 
                 cipher.loadPlaintext(ptInput.value);
                 currentStateVal.innerText = cipher.getStateHex();
                 animatedRound = currentMode === 'DEC' ? 80 : 0;
-                termContent.innerHTML = '<div style="color: rgba(255,255,255,0.4)">> Waiting for mathematical execution...</div>';
+                termContent.innerHTML = '<div style="color: rgba(255,255,255,0.4)"> Waiting for mathematical execution...</div>';
+
+                if (isAtk) {
+                    AttackUI.reset();
+                    executeAttackStep(0);
+                }
             }
             
-            if(stepIndex > 0) {
-                if( ((currentMode === 'ENC' || currentMode === 'ATK') && animatedRound === 0) || (currentMode === 'DEC' && animatedRound === 80) ) {
+            if (stepIndex > 0 && !isAtk) {
+                if( ((currentMode === 'ENC') && animatedRound === 0) || (currentMode === 'DEC' && animatedRound === 80) ) {
                     cipher.loadPlaintext(ptInput.value);
                 }
                 currentRoundTarget = data.endRound;
@@ -1148,8 +1789,9 @@
         }
 
         function triggerVisorPulse() {
+            if (currentMode === 'ATK') return; // ATK mode uses its own panel
             gsap.fromTo(visorData, 
-                { boxShadow: "0 0 40px " + ((currentMode === 'ENC') ? stepDataEnc : ((currentMode === 'DEC') ? stepDataDec : stepDataAtk))[currentStep].theme },
+                { boxShadow: "0 0 40px " + getStepData()[currentStep].theme },
                 { boxShadow: "0 0 20px rgba(0, 242, 254, 0.2)", duration: 0.5 }
             );
         }
@@ -1163,9 +1805,10 @@
         }
 
         function goToStep(stepIndex) {
-            if (stepIndex < 0 || stepIndex >= ((currentMode === 'ENC') ? stepDataEnc : ((currentMode === 'DEC') ? stepDataDec : stepDataAtk)).length) return;
+            const steps = getStepData();
+            if (stepIndex < 0 || stepIndex >= steps.length) return;
             currentStep = stepIndex;
-            const data = ((currentMode === 'ENC') ? stepDataEnc : ((currentMode === 'DEC') ? stepDataDec : stepDataAtk))[stepIndex];
+            const data = steps[stepIndex];
 
             gsap.to(blockGroup.position, { z: data.targetZ, duration: 2.5, ease: "power2.inOut" });
 
@@ -1211,28 +1854,7 @@
         let lastCryptoTime = 0;
 
         function triggerFault() {
-            // Flash a random block red
-            const blockIdx = Math.floor(Math.random() * 16);
-            const origEmissiveR = blockMaterials[blockIdx].emissive.r;
-            
-            gsap.to(blockMaterials[blockIdx].color, { r: 1, g: 0, b: 0, duration: 0.1, yoyo: true, repeat: 5, onComplete: () => {
-                const targetColor = new THREE.Color(stepDataAtk[currentStep].theme);
-                blockMaterials[blockIdx].color.copy(targetColor);
-            }});
-            gsap.to(blockMaterials[blockIdx].emissive, { r: 1, g: 0.2, b: 0.2, duration: 0.1, yoyo: true, repeat: 5, onComplete: () => {
-                blockMaterials[blockIdx].emissive.r = origEmissiveR;
-            }});
-            
-            // Screen shake
-            gsap.to(camera.position, {
-                x: camera.position.x + (Math.random()-0.5)*2, 
-                y: camera.position.y + (Math.random()-0.5)*2,
-                duration: 0.05, yoyo: true, repeat: 5,
-                onComplete: () => {
-                    const data = stepDataAtk[currentStep];
-                    gsap.to(camera.position, { x: data.camPos.x, y: data.camPos.y, z: data.camPos.z, duration: 0.5 });
-                }
-            });
+            triggerFaultVFX(Math.floor(Math.random() * 16));
         }
 
         function animate() {
@@ -1278,33 +1900,9 @@
                     
                     if (isSlowMode) {
                         if (currentMode === 'ATK') {
-                            if (currentStep === 1) {
-                                animatedRound++;
-                                if (animatedRound >= currentRoundTarget) {
-                                    triggerFault();
-                                    pushTerminalLog(`<br><div class="log-round" style="color:#ff3300">> FAULT INJECTED @ R78</div>`);
-                                    pushTerminalLog(`<div class="log-phase">Observation: ΔC acquired</div>`);
-                                    pushTerminalLog(`<div class="log-data">Key space reduced: 2^128 -> 2^64</div>`);
-                                }
-                            } else if (currentStep === 2) {
-                                pushTerminalLog(`<br><div class="log-phase" style="color:#00f2fe">> NORMALIZING KEYS:</div>`);
-                                pushTerminalLog(`<div class="log-data">L(K) ⊕ K' = C1</div>`);
-                                pushTerminalLog(`<div class="log-data">L(K) ⊕ K'' = C2</div>`);
-                                pushTerminalLog(`<div class="log-highlight">+ Equivalent class defined algebraically</div>`);
-                                animatedRound = 79;
-                            } else if (currentStep === 3) {
-                                triggerFault();
-                                pushTerminalLog(`<br><div class="log-round" style="color:#ff3300">> FAULTS EXECUTED (Multiple Rounds)</div>`);
-                                pushTerminalLog(`<div class="log-data">> Reversing Key Schedule...</div>`);
-                                pushTerminalLog(`<div class="log-data">K_r ⊕ L(C) = K_{r-1}</div>`);
-                                pushTerminalLog(`<div class="log-highlight">+ Intersecting Linear Equations</div>`);
-                                animatedRound = 80;
-                            } else if (currentStep === 4) {
-                                pushTerminalLog(`<br><div class="log-round" style="color:#00ff66">> FULL KEY RECOVERY SUCCESS</div>`);
-                                pushTerminalLog(`<div class="log-data">Master Key K Recovered.</div>`);
-                                pushTerminalLog(`<div class="log-highlight">K: A3 F1 09 D4 ... 3E B2</div>`);
-                                animatedRound = 80;
-                            }
+                            // ATK mode is handled by AttackUI module
+                            // No animation loop needed — steps execute on click
+                            isAnimatingCrypto = false;
                         } else if (currentMode === 'ENC') {
                             if (cryptoPhase === 0) {
                                 const layerCls = (animatedRound < 28 || animatedRound >= 52) ? 'ls' : '';
@@ -1378,7 +1976,7 @@
                     } else {
                         // Fast mode: Combine all phases into one tick without heavy logging
                         if (currentMode === 'ATK') {
-                            animatedRound++;
+                            isAnimatingCrypto = false; // Handled by AttackUI
                         } else if (currentMode === 'ENC') {
                             cipher.applySubCells(animatedRound);
                             cipher.applyPermBits();
@@ -1418,8 +2016,9 @@
                         isAnimatingCrypto = false;
                         termRoundIndicator.innerText = "Execution Paused";
                         pushTerminalLog(`<br><div class="log-round">> WAIT CONDITION SATISFIED</div>`);
-                        if(currentStep === 4) {
-                            visorStatus.innerText = "COMPLETED";
+                        const isFinalStep = currentStep === getStepData().length - 1;
+                        if(isFinalStep) {
+                            visorStatus.innerText = 'COMPLETED';
                         }
                     }
                     lastCryptoTime = time;
@@ -1432,6 +2031,20 @@
         window.onload = () => {
             cipher.loadPlaintext(ptInput.value);
             currentStateVal.innerText = cipher.getStateHex();
+
+            // Initialize Attack UI module
+            AttackUI.init({
+                log: pushTerminalLog,
+                updateState: (hex, round) => {
+                    currentStateVal.innerText = hex;
+                    stateLabel.innerText = `Attack State (R${round})`;
+                },
+                faultVFX: triggerFaultVFX,
+                keySpaceAnim: (bits) => {
+                    const bitsEl = document.getElementById('atk-keyspace-bits');
+                    if (bitsEl) bitsEl.textContent = bits + ' bits';
+                }
+            });
             
             const loader = document.getElementById('loader');
             loader.style.opacity = '0';
