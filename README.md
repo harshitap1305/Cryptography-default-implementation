@@ -1,12 +1,16 @@
-# DEFAULT Cipher — IC-DFA Attack Visualization
+# DEFAULT Cipher — Interactive Implementation & Attack Visualization
 
-An interactive, browser-based 3D visualization of the **Information-Combining Differential Fault Attack (IC-DFA)** on the **DEFAULT cipher**, as presented at Eurocrypt 2022 by Nageler et al.
+A browser-based, interactive 3D implementation of the **DEFAULT cipher** — covering full **encryption**, **decryption**, and an **IC-DFA attack simulation** — all rendered in real-time 3D using Three.js.
 
 ## Overview
 
 DEFAULT is a lightweight block cipher with a "sandwich" architecture that uses two different S-boxes (LS and NLS) across 80 rounds, operating on a 128-bit state with a 128-bit key.
 
-This project simulates and visualizes the full IC-DFA attack pipeline in an 8-step walkthrough, allowing you to observe how fault injections progressively reduce the secret key space from 2¹²⁸ down to a unique solution — all rendered in real-time 3D using Three.js.
+This project implements the complete DEFAULT cipher and exposes it through three interactive tabs:
+
+- **Encryption** — Run the full 80-round DEFAULT encryption on any custom plaintext
+- **Decryption** — Reverse the cipher (Round 79 → 0) to recover the original plaintext
+- **Attack Analysis** — Simulate the Information-Combining Differential Fault Attack (IC-DFA) as presented at Eurocrypt 2022 by Nageler et al., observing how fault injections reduce the key space from 2¹²⁸ down to a unique solution
 
 ## Features
 
