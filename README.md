@@ -1,16 +1,40 @@
-# DEFAULT Cipher — IC-DFA Attack Visualization
+# DEFAULT Cipher — Interactive Implementation & Attack Visualization
 
-An interactive, browser-based 3D visualization of the **Information-Combining Differential Fault Attack (IC-DFA)** on the **DEFAULT cipher**, as presented at Eurocrypt 2022 by Nageler et al.
+A browser-based, interactive 3D implementation of the **DEFAULT cipher** — covering full **encryption**, **decryption**, and an **IC-DFA attack simulation** — all rendered in real-time 3D using Three.js.
 
 ## Overview
 
 DEFAULT is a lightweight block cipher with a "sandwich" architecture that uses two different S-boxes (LS and NLS) across 80 rounds, operating on a 128-bit state with a 128-bit key.
 
-This project simulates and visualizes the full IC-DFA attack pipeline in an 8-step walkthrough, allowing you to observe how fault injections progressively reduce the secret key space from 2¹²⁸ down to a unique solution — all rendered in real-time 3D using Three.js.
+This project implements the complete DEFAULT cipher and exposes it through three interactive tabs:
+
+- **Encryption** — Run the full 80-round DEFAULT encryption on any custom plaintext
+- **Decryption** — Reverse the cipher (Round 79 → 0) to recover the original plaintext
+- **Attack Analysis** — Simulate the Information-Combining Differential Fault Attack (IC-DFA) as presented at Eurocrypt 2022 by Nageler et al., observing how fault injections reduce the key space from 2¹²⁸ down to a unique solution
 
 ## Features
 
-- **3D Cipher Visualization** — Three.js-powered rendering of the DEFAULT cipher's sandwich round structure with bloom post-processing effects
+The application is organized into three interactive tabs:
+
+### 🔐 Encryption Tab
+
+Visualizes the full 80-round DEFAULT encryption process on a custom plaintext:
+
+- Enter any 128-bit **plaintext** (hex) in the data visor
+- Enable **Inspect Step-by-Step** mode to pause at each round and observe the mathematical state transformations
+- Watch the sandwich architecture in action: 28 rounds of LS S-boxes → 24 rounds of NLS S-boxes → 28 rounds of LS S-boxes
+- Produces the final **128-bit ciphertext** after all 80 rounds
+
+### 🔓 Decryption Tab
+
+Reverses the encryption to recover the original plaintext:
+
+- Enter any 128-bit **ciphertext** (hex) in the data visor
+- The cipher runs backwards (Round 79 → Round 0), applying inverse S-box and permutation operations at each step
+- Reconstructs the original **128-bit plaintext** upon completion
+
+### ⚔️ Attack Analysis Tab
+
 - **Live Attack Simulation** — Step-by-step IC-DFA attack with real cryptographic computations
 - **8-Phase Attack Walkthrough:**
   1. **Setup** — Generate a random 128-bit secret key
@@ -25,6 +49,10 @@ This project simulates and visualizes the full IC-DFA attack pipeline in an 8-st
 - **Nibble Candidate Grid** — 32-nibble display showing per-nibble candidate counts
 - **Equation System Monitor** — Tracks rank of the overdetermined system of fault equations
 - **Crypto Terminal** — Live log of all intermediate computation steps
+
+### Common Features
+
+- **3D Cipher Visualization** — Three.js-powered rendering of the DEFAULT cipher's sandwich round structure with bloom post-processing effects across all three tabs
 
 ## Demo
 
