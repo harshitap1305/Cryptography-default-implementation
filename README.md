@@ -1,3 +1,4 @@
+# CSL505 - Cryptography
 # DEFAULT Cipher — Interactive Implementation & Attack Visualization
 
 A browser-based, interactive 3D implementation of the **DEFAULT cipher** — covering full **encryption**, **decryption**, and an **IC-DFA attack simulation** — all rendered in real-time 3D using Three.js.
