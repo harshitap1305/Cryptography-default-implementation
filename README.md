@@ -119,4 +119,4 @@ All dependencies are loaded via CDN — no installation needed.
 
 - Nageler, M., Leurent, G., Eichlseder, M., & Rechberger, C. (2022). **Information-Combining Differential Fault Attacks on DEFAULT**. *Eurocrypt 2022*.
 - Original DEFAULT cipher paper included as `default_orginal_paper.pdf`.
-- Attack paper included as `euro_crypt_atatck.pdf`.
+- Attack paper included as `euro_crypt_attack.pdf`.
